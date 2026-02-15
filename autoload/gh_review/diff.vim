@@ -9,6 +9,14 @@ import autoload 'gh_review/files.vim'
 
 const SID = expand('<SID>')
 
+# Virtual text property type (registered once)
+if empty(prop_type_get('gh_review_virt_text'))
+  prop_type_add('gh_review_virt_text', {highlight: 'GHReviewVirtText'})
+endif
+
+# Floating preview state
+var preview_winid: number = -1
+
 # Get the effective line number for a thread, falling back to originalLine
 # for outdated threads where line is null.
 def GetThreadLine(t: dict<any>): number
@@ -214,6 +222,21 @@ def ShowDiff(path: string, left_content: list<string>, right_content: list<strin
   # Place signs for review threads
   PlaceSigns(path)
 
+  # Set window-local statusline for context
+  var pr_num = state.GetPRNumber()
+  var base_short = state.GetMergeBaseOid()[: 6]
+  var head_short = state.GetHeadOid()[: 6]
+  if pr_num > 0
+    var left_winid = bufwinid(left_bufnr)
+    if left_winid != -1
+      setwinvar(left_winid, '&statusline', printf(' PR\ #%d\ ·\ %s\ ·\ base\ (%s)', pr_num, escape(path, ' \'), base_short))
+    endif
+    var right_winid = bufwinid(right_bufnr)
+    if right_winid != -1
+      setwinvar(right_winid, '&statusline', printf(' PR\ #%d\ ·\ %s\ ·\ head\ (%s)', pr_num, escape(path, ' \'), head_short))
+    endif
+  endif
+
   # Position cursor in the right (head) window at the top
   win_gotoid(bufwinid(right_bufnr))
   normal! gg
@@ -237,12 +260,8 @@ def CheckExternalChange(bufnr: number)
     return
   endif
   setbufvar(bufnr, 'gh_review_file_mtime', cur_mtime)
-  inputsave()
-  var choice = input(printf('%s changed on disk. Reload? (Y/n) ', path))
-  inputrestore()
-  if choice ==? 'n'
-    echo ''
-    redraw
+  var choice = confirm(printf('%s changed on disk. Reload?', path), "&Yes\n&No", 1)
+  if choice != 1
     return
   endif
   var new_content = readfile(path)
@@ -329,6 +348,7 @@ def SetupDiffBuffer(bufnr: number, name: string, path: string, content: list<str
 
   setlocal foldmethod=diff
   setlocal signcolumn=yes
+  setlocal nonumber
 
   # Mark buffer so the fold guard can identify it
   b:gh_review_diff = true
@@ -343,6 +363,8 @@ def SetupDiffBuffer(bufnr: number, name: string, path: string, content: list<str
   xnoremap <buffer> <silent> gs <ScriptCmd>CreateSuggestionVisual()<CR>
   nnoremap <buffer> <silent> gf <ScriptCmd>files.Toggle()<CR>
   nnoremap <buffer> <silent> q <ScriptCmd>CloseDiff()<CR>
+  nnoremap <buffer> <silent> K <ScriptCmd>PreviewThreadAtCursor()<CR>
+  nnoremap <buffer> <silent> g? <ScriptCmd>ShowDiffHelp()<CR>
 enddef
 
 def GetCurrentSide(): string
@@ -357,12 +379,14 @@ def PlaceSigns(path: string)
   var left_bufnr = state.GetLeftBufnr()
   var right_bufnr = state.GetRightBufnr()
 
-  # Clear existing signs
+  # Clear existing signs and virtual text
   if left_bufnr != -1 && bufexists(left_bufnr)
     sign_unplace('gh_review', {buffer: left_bufnr})
+    prop_remove({type: 'gh_review_virt_text', bufnr: left_bufnr, all: true})
   endif
   if right_bufnr != -1 && bufexists(right_bufnr)
     sign_unplace('gh_review', {buffer: right_bufnr})
+    prop_remove({type: 'gh_review_virt_text', bufnr: right_bufnr, all: true})
   endif
 
   var sign_id = 1
@@ -398,6 +422,22 @@ def PlaceSigns(path: string)
 
     sign_place(sign_id, 'gh_review', sign_name, target_bufnr, {lnum: line})
     sign_id += 1
+
+    # Add virtual text showing first comment author and truncated body
+    if !empty(comments) && bufloaded(target_bufnr)
+      var first = comments[0]
+      var author = get(get(first, 'author', {}), 'login', '')
+      var body = substitute(get(first, 'body', ''), "\n.*", '', '')
+      if len(body) > 57
+        body = body[: 56] .. '...'
+      endif
+      var label = author .. ': ' .. body
+      try
+        prop_add(line, 0, {type: 'gh_review_virt_text', bufnr: target_bufnr, text: label, text_align: 'after', text_padding_left: 2})
+      catch
+        # Virtual text is informational; skip silently if buffer state prevents it
+      endtry
+    endif
   endfor
 enddef
 
@@ -517,6 +557,115 @@ def JumpToPrevThread()
   else
     echo 'No more threads'
   endif
+enddef
+
+def ClosePreview()
+  if preview_winid != -1 && popup_getpos(preview_winid) != {}
+    popup_close(preview_winid)
+  endif
+  preview_winid = -1
+enddef
+
+def PreviewThreadAtCursor()
+  ClosePreview()
+  var lnum = line('.')
+  var side = GetCurrentSide()
+  var path = state.GetDiffPath()
+  var file_threads = state.GetThreadsForFile(path)
+
+  var found: dict<any> = {}
+  for t in file_threads
+    var thread_line: number = GetThreadLine(t)
+    if thread_line <= 0
+      continue
+    endif
+    var thread_side = get(t, 'diffSide', 'RIGHT')
+    if thread_line == lnum && thread_side ==# side
+      found = t
+      break
+    endif
+  endfor
+
+  if empty(found)
+    echo 'No thread at this line'
+    return
+  endif
+
+  var comments = get(get(found, 'comments', {}), 'nodes', [])
+  var is_resolved = get(found, 'isResolved', false)
+  var thread_path = get(found, 'path', path)
+  var thread_line = GetThreadLine(found)
+  var status = is_resolved ? 'Resolved' : 'Active'
+
+  var content: list<string> = []
+  add(content, printf('Thread on %s:%d  [%s]', thread_path, thread_line, status))
+  add(content, repeat("─", 50))
+  for c in comments
+    var author = get(get(c, 'author', {}), 'login', 'unknown')
+    var created = substitute(get(c, 'createdAt', ''), 'T.*', '', '')
+    add(content, '')
+    add(content, printf('%s (%s):', author, created))
+    var body_lines = split(substitute(get(c, 'body', ''), "\r", '', 'g'), "\n")
+    for bl in body_lines
+      add(content, '  ' .. bl)
+    endfor
+  endfor
+
+  var max_width = 10
+  for ln in content
+    if len(ln) > max_width
+      max_width = len(ln)
+    endif
+  endfor
+  if max_width > 72
+    max_width = 72
+  endif
+
+  preview_winid = popup_atcursor(content, {
+    border: [],
+    padding: [0, 1, 0, 1],
+    maxwidth: max_width + 2,
+    maxheight: 20,
+    close: 'click',
+    filter: (winid, key) => {
+      if key == 'q' || key == "\<Esc>"
+        popup_close(winid)
+        return true
+      endif
+      return false
+    },
+    callback: (_id, _result) => {
+      preview_winid = -1
+    },
+  })
+enddef
+
+def ShowDiffHelp()
+  var help = [
+    ' Diff keymaps',
+    ' ' .. repeat("─", 40),
+    '  gt    Open review thread',
+    '  gc    New comment (visual: range)',
+    '  gs    New suggestion (right only)',
+    '  ]t    Next thread',
+    '  [t    Previous thread',
+    '  K     Preview thread',
+    '  gf    Toggle files list',
+    '  q     Close diff',
+    '  g?    This help',
+  ]
+  popup_atcursor(help, {
+    border: [],
+    padding: [0, 1, 0, 1],
+    close: 'click',
+    filter: (winid, key) => {
+      if key == 'q' || key == "\<Esc>"
+        popup_close(winid)
+        return true
+      endif
+      return false
+    },
+  })
 enddef
 
 export def CloseDiff()

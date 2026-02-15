@@ -4,6 +4,8 @@ A Vim 9.0+ plugin for reviewing GitHub pull requests entirely within Vim.
 
 Side-by-side diffs, review threads, code suggestions, and review submission — all driven by the `gh` CLI.
 
+Also available for Neovim: [gh-review.nvim](https://github.com/gh-tui-tools/gh-review.nvim).
+
 ## Goal
 
 This plugin — which is designed for the use case where you’ve already identified a specific PR or PR branch you’re ready to review — has just one single goal:
@@ -74,7 +76,9 @@ When the URL refers to a different repo than the current working directory, no c
 <CR>                    Open a file’s side-by-side diff
 ]t / [t                 Jump between review threads
 gt                      View a thread
+K                       Preview a thread (floating popup)
 gc                      Add a comment
+g?                      Show keymap help
 :GHReviewSubmit         Submit a review
 :GHReviewClose          Close all review buffers
 ```
@@ -99,8 +103,10 @@ gc                      Add a comment
 | `gs`  | Create a suggestion (right buffer only, visual: range)|
 | `]t`  | Jump to the next review thread                        |
 | `[t`  | Jump to the previous review thread                    |
+| `K`   | Preview the thread at cursor (floating popup)         |
 | `gf`  | Toggle the files list                                 |
 | `q`   | Close the diff view                                   |
+| `g?`  | Show keymap help                                      |
 
 ## Thread mappings
 
@@ -110,8 +116,10 @@ gc                      Add a comment
 | `Ctrl-R` | Toggle resolved/unresolved                    |
 | `q`      | Close the thread buffer                       |
 | `Ctrl-Q` | Close the thread buffer (works in insert mode)|
+| `g?`     | Show keymap help                              |
+| `Ctrl-X Ctrl-O` | Complete `@`-mention from thread participants |
 
-## Signs
+## Signs and virtual text
 
 | Sign | Meaning                          |
 |------|----------------------------------|
@@ -119,32 +127,47 @@ gc                      Add a comment
 | `CR` | Resolved thread (green)          |
 | `CP` | Pending review comment (yellow)  |
 
-## Comparison with Neovim plugins
+Each sign is accompanied by virtual text at end-of-line showing the first comment’s author and a truncated body — giving at-a-glance context without opening the thread.
 
-There does not appear to be any other existing Vim plugin for performing GitHub PR reviews. There are, however, Neovim plugins that provide PR review features — so the following table provides a feature comparison.
+## Prompts
 
-| Feature                          | gh-review.vim       | [gh.nvim][]         | [octo.nvim][]       |
-|----------------------------------|---------------------|---------------------|---------------------|
-| **Platform**                     | Vim 9.0+            | Neovim              | Neovim 0.10+        |
-| **PR review: side-by-side diff** | Yes                 | Yes                 | Yes                 |
-| **PR review: comments/threads**  | Yes                 | Yes                 | Yes                 |
-| **PR review: code suggestions**  | Yes                 | No                  | Yes                 |
-| **PR review: submit review**     | Yes                 | Yes                 | Yes                 |
-| **PR review: resolve threads**   | Yes                 | Yes                 | Yes                 |
-| **PR review: thread signs**      | Yes                 | No                  | No                  |
-| **Editable diff buffers**        | Yes                 | Yes (via checkout)  | No                  |
-| **External change detection**    | Yes                 | No                  | No                  |
-| **Fork PR push tracking**        | Yes                 | Yes                 | No                  |
-| **PR listing/browsing**          | No (non-goal)       | Yes                 | Yes                 |
-| **Merge PRs**                    | No (non-goal)       | No                  | Yes                 |
-| **Labels/assignees/reviewers**   | No (non-goal)       | No                  | Yes                 |
-| **GitHub Issues**                | No (non-goal)       | Yes                 | Yes                 |
-| **Notifications**                | No (non-goal)       | Yes                 | Yes                 |
-| **Discussions**                  | No (non-goal)       | No                  | Yes                 |
-| **Actions/Workflows**            | No (non-goal)       | No                  | Yes                 |
-| **Reactions**                    | No (non-goal)       | No                  | Yes                 |
-| **Dependencies**                 | `gh` CLI            | `gh` CLI, litee.nvim| `gh` CLI, plenary.nvim, picker |
+All prompts (submit review, discard review, checkout, file reload) use `popup_menu()` and `confirm()` for a modern UI — no raw `inputlist()` or `input()`.
 
+## Statusline
+
+```vim
+&statusline ..= '%{gh_review#Statusline()}'
+```
+
+Returns `""` when no review is active, or a summary like `PR #42 · reviewing · 4 threads`.
+
+## Comparison with other plugins
+
+gh-review.vim shares its design with [gh-review.nvim][], its Neovim counterpart. There does not appear to be any other existing Vim plugin for performing GitHub PR reviews — but several Neovim plugins provide PR review features.
+
+| Feature                          | gh-review.vim       | [gh-review.nvim][]  | [gh.nvim][]         | [octo.nvim][]       |
+|----------------------------------|---------------------|---------------------|---------------------|---------------------|
+| **Platform**                     | Vim 9.0+            | Neovim 0.10+        | Neovim              | Neovim 0.10+        |
+| **PR review: side-by-side diff** | Yes                 | Yes                 | Yes                 | Yes                 |
+| **PR review: comments/threads**  | Yes                 | Yes                 | Yes                 | Yes                 |
+| **PR review: code suggestions**  | Yes                 | Yes                 | No                  | Yes                 |
+| **PR review: submit review**     | Yes                 | Yes                 | Yes                 | Yes                 |
+| **PR review: resolve threads**   | Yes                 | Yes                 | Yes                 | Yes                 |
+| **PR review: thread signs**      | Yes (+ virtual text)| Yes (+ virtual text)| No                  | No                  |
+| **Editable diff buffers**        | Yes                 | Yes                 | Yes (via checkout)  | No                  |
+| **External change detection**    | Yes                 | Yes                 | No                  | No                  |
+| **Fork PR push tracking**        | Yes                 | Yes                 | Yes                 | No                  |
+| **PR listing/browsing**          | No (non-goal)       | No (non-goal)       | Yes                 | Yes                 |
+| **Merge PRs**                    | No (non-goal)       | No (non-goal)       | No                  | Yes                 |
+| **Labels/assignees/reviewers**   | No (non-goal)       | No (non-goal)       | No                  | Yes                 |
+| **GitHub Issues**                | No (non-goal)       | No (non-goal)       | Yes                 | Yes                 |
+| **Notifications**                | No (non-goal)       | No (non-goal)       | Yes                 | Yes                 |
+| **Discussions**                  | No (non-goal)       | No (non-goal)       | No                  | Yes                 |
+| **Actions/Workflows**            | No (non-goal)       | No (non-goal)       | No                  | Yes                 |
+| **Reactions**                    | No (non-goal)       | No (non-goal)       | No                  | Yes                 |
+| **Dependencies**                 | `gh` CLI            | `gh` CLI            | `gh` CLI, litee.nvim| `gh` CLI, plenary.nvim, picker |
+
+[gh-review.nvim]: https://github.com/gh-tui-tools/gh-review.nvim
 [gh.nvim]: https://github.com/ldelossa/gh.nvim
 [octo.nvim]: https://github.com/pwntester/octo.nvim
 

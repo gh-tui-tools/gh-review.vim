@@ -97,8 +97,8 @@ export def Open(pr_number_str: string = '')
         return
       endif
 
-      var choice = input(printf('Check out branch %s? (Y/n) ', local_branch))
-      if choice ==? 'n'
+      var choice = confirm(printf('Check out branch %s?', local_branch), "&Yes\n&No", 1)
+      if choice != 1
         should_checkout = false
         state.SetLocalCheckout(false)
         LoadUI()
@@ -275,68 +275,72 @@ export def SubmitReview()
     return
   endif
 
-  var choice = inputlist([
-    'Submit review as:',
-    '1. Comment',
-    '2. Approve',
-    '3. Request changes',
-  ])
-
-  if choice < 1 || choice > 3
-    echo 'Cancelled'
-    return
-  endif
-
-  var events = ['COMMENT', 'APPROVE', 'REQUEST_CHANGES']
-  var event = events[choice - 1]
-
-  var body = ''
-  if choice == 1 || choice == 3
-    body = input('Review body (optional): ')
-  endif
-
-  echo 'Submitting review...'
-
-  if state.IsReviewActive()
-    # Submit the existing pending review.
-    var vars: dict<any> = {
-      reviewId: state.GetPendingReviewId(),
-      event: event,
-    }
-    if !empty(body)
-      vars.body = body
-    endif
-
-    api.GraphQL(graphql.MUTATION_SUBMIT_REVIEW, vars, (result) => {
-      var review = get(get(get(result, 'data', {}), 'submitPullRequestReview', {}), 'pullRequestReview', {})
-      if !empty(review)
-        state.SetPendingReviewId('')
-        echo 'Review submitted as ' .. event
-        RefreshThreads()
-      else
-        echoerr '[gh-review] Failed to submit review'
+  popup_menu(['Comment', 'Approve', 'Request changes'], {
+    title: ' Submit review as ',
+    border: [],
+    padding: [0, 1, 0, 1],
+    callback: (_, choice) => {
+      if choice < 1
+        echo 'Cancelled'
+        return
       endif
-    })
-  else
-    # No pending review; create and submit in one step.
-    var vars: dict<any> = {
-      pullRequestId: state.GetPRId(),
-      event: event,
-    }
-    if !empty(body)
-      vars.body = body
-    endif
 
-    api.GraphQL(graphql.MUTATION_CREATE_AND_SUBMIT_REVIEW, vars, (result) => {
-      var review = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
-      if !empty(review)
-        echo 'Review submitted as ' .. event
-        RefreshThreads()
+      var events = ['COMMENT', 'APPROVE', 'REQUEST_CHANGES']
+      var event = events[choice - 1]
+
+      var DoSubmit = (body: string) => {
+        echo 'Submitting review...'
+
+        if state.IsReviewActive()
+          var vars: dict<any> = {
+            reviewId: state.GetPendingReviewId(),
+            event: event,
+          }
+          if !empty(body)
+            vars.body = body
+          endif
+
+          api.GraphQL(graphql.MUTATION_SUBMIT_REVIEW, vars, (result) => {
+            var review = get(get(get(result, 'data', {}), 'submitPullRequestReview', {}), 'pullRequestReview', {})
+            if !empty(review)
+              state.SetPendingReviewId('')
+              echo 'Review submitted as ' .. event
+              RefreshThreads()
+            else
+              echoerr '[gh-review] Failed to submit review'
+            endif
+          })
+        else
+          var vars: dict<any> = {
+            pullRequestId: state.GetPRId(),
+            event: event,
+          }
+          if !empty(body)
+            vars.body = body
+          endif
+
+          api.GraphQL(graphql.MUTATION_CREATE_AND_SUBMIT_REVIEW, vars, (result) => {
+            var review = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
+            if !empty(review)
+              echo 'Review submitted as ' .. event
+              RefreshThreads()
+            else
+              echoerr '[gh-review] Failed to submit review'
+            endif
+          })
+        endif
+      }
+
+      if choice == 1 || choice == 3
+        inputsave()
+        var body = input('Review body (optional): ')
+        inputrestore()
+        DoSubmit(body)
       else
-        echoerr '[gh-review] Failed to submit review'
+        DoSubmit('')
       endif
-    })
-  endif
+    },
+  })
 enddef
 
 # Discard the pending review (delete it and all its pending comments).
@@ -346,13 +350,13 @@ export def DiscardReview()
     return
   endif
 
-  var choice = input('Discard pending review and all its comments? (y/N) ')
-  if choice !=? 'y'
-    echo '\nCancelled'
+  var choice = confirm('Discard pending review and all its comments?', "&Yes\n&No", 2)
+  if choice != 1
+    echo 'Cancelled'
     return
   endif
 
-  echo '\nDiscarding review...'
+  echo 'Discarding review...'
   var vars: dict<any> = {pullRequestReviewId: state.GetPendingReviewId()}
   api.GraphQL(graphql.MUTATION_DELETE_REVIEW, vars, (result) => {
     var review = get(get(get(result, 'data', {}), 'deletePullRequestReview', {}), 'pullRequestReview', {})
@@ -385,6 +389,23 @@ export def RefreshThreads()
     files.Rerender()
     echo 'Threads refreshed'
   })
+enddef
+
+# Statusline component: returns "" when no review is active, or a summary.
+export def Statusline(): string
+  if empty(state.GetPRId())
+    return ''
+  endif
+  var parts: list<string> = []
+  add(parts, printf('PR #%d', state.GetPRNumber()))
+  if state.IsReviewActive()
+    add(parts, 'reviewing')
+  endif
+  var thread_count = len(state.GetThreads())
+  if thread_count > 0
+    add(parts, printf('%d %s', thread_count, thread_count == 1 ? 'thread' : 'threads'))
+  endif
+  return join(parts, ' · ')
 enddef
 
 # Close all review buffers and reset state.

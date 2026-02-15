@@ -2,7 +2,7 @@
 
 ## Overview
 
-gh-review.vim is a Vim 9.0+ plugin for reviewing GitHub pull requests entirely within Vim. It provides side-by-side diffs, review thread viewing and commenting, commit suggestions, and review submission — all driven by the `gh` CLI and the GitHub GraphQL/REST APIs.
+gh-review.vim is a Vim 9.0+ plugin for reviewing GitHub pull requests entirely within Vim. It is the Vim counterpart to [gh-review.nvim](https://github.com/gh-tui-tools/gh-review.nvim); the two plugins share a common design, each implemented idiomatically for its editor. gh-review.vim provides side-by-side diffs, review thread viewing and commenting, commit suggestions, and review submission — all driven by the `gh` CLI and the GitHub GraphQL/REST APIs.
 
 ### Scope
 
@@ -78,6 +78,8 @@ All plugin state lives in script-local variables in `state.vim`, accessed throug
 - **Review threads**: indexed by thread ID in a dict. Threads are the central data structure — they drive sign placement, files list thread counts, and the thread buffer content.
 - **Buffer/window IDs**: files list, left diff, right diff, thread buffer and window.
 - **UI state**: current diff path, local checkout flag, pending review ID.
+
+`GetParticipants()` extracts unique, sorted `author.login` values from all thread comments, used by the thread buffer’s omnifunc for `@`-mention completion.
 
 `Reset()` clears everything, called by `:GHReviewClose`.
 
@@ -159,6 +161,7 @@ Files changed (3)
 - `<CR>` opens the side-by-side diff for the file under the cursor.
 - `R` refreshes threads from GitHub and rerenders.
 - `q` / `gf` closes the files list.
+- `g?` opens a popup showing available keymaps.
 - When the files list closes, `wincmd =` equalizes window heights, then a scroll nudge (`Ctrl-E` / `Ctrl-Y`) in each diff window forces scrollbind viewports to update.
 
 ### Side-by-side diff (`diff.vim`)
@@ -199,17 +202,31 @@ When `is_local_checkout` is true, the right buffer is set up with:
 
 Plugins (LSP, linters) may asynchronously override `foldmethod` on diff buffers. A global `OptionSet` autocmd in `plugin/gh_review.vim` restores `foldmethod=diff` whenever it changes on buffers marked with `b:gh_review_diff`.
 
-#### Signs
+#### Signs and virtual text
 
-Review threads are shown as signs in the sign column:
+Review threads are indicated by signs in the sign column and virtual text at end-of-line:
 
-- `CT` (blue) — normal thread (last comment state is `COMMENTED`).
-- `CR` (green) — resolved thread.
-- `CP` (yellow) — thread with a pending review comment.
+- `CT` (blue, `GHReviewThread`) — normal thread (last comment state is `COMMENTED`).
+- `CR` (green, `GHReviewThreadResolved`) — resolved thread.
+- `CP` (yellow, `GHReviewThreadPending`) — thread with a pending review comment.
 
-Signs are placed by `PlaceSigns()`, which iterates threads for the current file and places them on the appropriate side (left or right buffer) at the thread’s line number. For outdated threads where `line` is null, it falls back to `originalLine`.
+Each sign is accompanied by virtual text (via `prop_add` with `text` and `text_align: “after”`) showing the first comment’s author and a truncated body (up to 60 characters), highlighted with `GHReviewVirtText` (dim italic). This gives at-a-glance context without opening the thread.
 
-`RefreshSigns()` clears and replaces all signs for the current diff path.
+`PlaceSigns()` iterates threads for the current file and places both signs and virtual text on the appropriate side (left or right buffer) at the thread’s line number. For outdated threads where `line` is null, it falls back to `originalLine`. Virtual text is guarded by a `bufloaded()` check and a `try`/`catch` since `prop_add` with `bufnr:` requires the target buffer to be loaded with content.
+
+`RefreshSigns()` clears and replaces all signs and virtual text for the current diff path.
+
+#### Floating thread preview
+
+The `K` keymap opens a floating popup (`popup_atcursor` with border and padding) showing the full thread content at the cursor line. The preview is read-only and closes on `q`, `<Esc>`, or click outside. Only one preview can be open at a time (tracked in a script-local `preview_winid`). This is lighter than `gt` — no split, no reply area.
+
+#### Help popup
+
+The `g?` keymap opens a floating popup listing all available keymaps for the current buffer type. Each buffer type (diff, thread, files list) has its own help card. This provides keymap discoverability without external plugins — the Vim analogue to Neovim’s keymap `desc` fields and which-key.nvim integration.
+
+#### Window-local statusline
+
+Both diff windows display a window-local statusline (via `setwinvar(winid, “&statusline”, ...)`) showing `PR #N · path · base/head (short OID)`, providing persistent context about what’s being reviewed. This sets the local statusline for each window independently, leaving the global statusline unaffected.
 
 #### Keymaps
 
@@ -220,8 +237,10 @@ Signs are placed by `PlaceSigns()`, which iterates threads for the current file 
 | `gs`  | Create suggestion (right buffer only, visual: range) |
 | `]t`  | Jump to next thread sign                            |
 | `[t`  | Jump to previous thread sign                        |
+| `K`   | Preview thread at cursor (floating popup)           |
 | `gf`  | Toggle the files list                               |
 | `q`   | Close the diff view                                 |
+| `g?`  | Show keymap help                                    |
 
 ### Thread buffer (`thread.vim`)
 
@@ -267,6 +286,24 @@ Three paths depending on context:
 | `Ctrl-R` | Toggle resolved/unresolved                   |
 | `q`      | Close thread buffer                          |
 | `Ctrl-Q` | Close thread buffer (works in insert mode)   |
+| `g?`     | Show keymap help                             |
+
+#### @-mention completion
+
+The thread buffer sets `omnifunc=GHReviewThreadOmnifunc`, a global function that completes `@`-mentions from thread participants. `state.GetParticipants()` provides the candidate list. Users trigger completion with `Ctrl-X Ctrl-O` (standard Vim omni-completion). The omnifunc is defined as a global function (`def g:GHReviewThreadOmnifunc()`) because Vim9script `def` functions in autoloaded scripts cannot be referenced directly as option values.
+
+### Prompts
+
+User prompts use `popup_menu()` and `confirm()` instead of the legacy `inputlist()` and `input()`:
+
+- **Submit review action**: `popup_menu([“Comment”, “Approve”, “Request changes”], ...)` with a title and border.
+- **Discard confirmation**: `confirm()` with “Yes”/“No” buttons, defaulting to “No”.
+- **Checkout confirmation**: `confirm()` for branch checkout.
+- **External file reload**: `confirm()` for disk-change detection.
+
+### Statusline component
+
+`gh_review#Statusline()` returns an empty string when no review is active, or a summary like `PR #42 · reviewing · 4 threads`. Users can call this from their `statusline` expression.
 
 ### Review lifecycle
 
@@ -291,10 +328,10 @@ Tests run in headless Vim (`vim --clean --not-a-term -N`) and use a custom `RunT
 
 | File                  | Coverage                                        |
 |-----------------------|-------------------------------------------------|
-| `test_state.vim`      | State setters/getters, SetPR, threads, reset    |
-| `test_diff_logic.vim` | Sign placement, sign types, mtime tracking      |
+| `test_state.vim`      | State setters/getters, SetPR, threads, reset, GetParticipants, Statusline |
+| `test_diff_logic.vim` | Sign placement, sign types, virtual text, mtime tracking |
 | `test_ui.vim`         | Files list rendering, toggle, close, keymaps    |
-| `test_thread.vim`     | Thread buffer rendering, metadata, close        |
+| `test_thread.vim`     | Thread buffer rendering, metadata, close, omnifunc |
 | `test_navigation.vim` | Sign placement across sides, refresh, edge cases |
 | `test_graphql.vim`    | GraphQL constant structure validation           |
 | `test_open.vim`       | URL/number parsing                              |

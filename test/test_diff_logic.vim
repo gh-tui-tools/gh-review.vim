@@ -15,6 +15,7 @@ def SetupBuffer(name: string, num_lines: number): number
   var bufnr = bufnr(name, true)
   execute 'buffer' bufnr
   setlocal buftype=nofile
+  setlocal bufhidden=hide
   setlocal noswapfile
   setlocal modifiable
   var lines: list<string> = []
@@ -282,6 +283,71 @@ g:RunTest('BufWriteCmd updates stored mtime so write is not seen as external cha
 
   # Clean up
   delete(tmpfile)
+  execute 'bwipeout!' left
+  execute 'bwipeout!' right
+})
+
+
+g:RunTest('Virtual text shows author and body', () => {
+  state.Reset()
+
+  enew
+  var left = SetupBuffer('gh-review://LEFT/src/vt_test.ts', 30)
+  state.SetLeftBufnr(left)
+  enew
+  var right = SetupBuffer('gh-review://RIGHT/src/vt_test.ts', 30)
+  state.SetRightBufnr(right)
+  state.SetDiffPath('src/vt_test.ts')
+
+  state.SetThreads([
+    {id: 'vt1', isResolved: false, isOutdated: false, line: 10, originalLine: 10, startLine: v:null, originalStartLine: v:null, diffSide: 'RIGHT', path: 'src/vt_test.ts', comments: {nodes: [{id: 'c1', body: 'Looks good to me', author: {login: 'alice'}, createdAt: '2025-01-15T10:30:00Z', pullRequestReview: {id: 'r1', state: 'COMMENTED'}}]}},
+  ])
+
+  diff.RefreshSigns()
+
+  var props = prop_list(10, {bufnr: right})
+  var has_vt = false
+  for p in props
+    if get(p, 'type', '') ==# 'gh_review_virt_text'
+      has_vt = true
+      var text = get(p, 'text', '')
+      assert_match('alice', text, 'virtual text should contain author')
+      assert_match('Looks good', text, 'virtual text should contain body')
+    endif
+  endfor
+  assert_true(has_vt, 'should have virtual text property')
+
+  execute 'bwipeout!' left
+  execute 'bwipeout!' right
+})
+
+g:RunTest('Virtual text truncates long bodies to 60 chars', () => {
+  state.Reset()
+
+  enew
+  var left = SetupBuffer('gh-review://LEFT/src/trunc.ts', 30)
+  state.SetLeftBufnr(left)
+  enew
+  var right = SetupBuffer('gh-review://RIGHT/src/trunc.ts', 30)
+  state.SetRightBufnr(right)
+  state.SetDiffPath('src/trunc.ts')
+
+  var long_body = repeat('x', 100)
+  state.SetThreads([
+    {id: 'tr1', isResolved: false, isOutdated: false, line: 5, originalLine: 5, startLine: v:null, originalStartLine: v:null, diffSide: 'RIGHT', path: 'src/trunc.ts', comments: {nodes: [{id: 'c1', body: long_body, author: {login: 'bob'}, createdAt: '2025-01-15T10:30:00Z', pullRequestReview: {id: 'r1', state: 'COMMENTED'}}]}},
+  ])
+
+  diff.RefreshSigns()
+
+  var props = prop_list(5, {bufnr: right})
+  for p in props
+    if get(p, 'type', '') ==# 'gh_review_virt_text'
+      var text = get(p, 'text', '')
+      assert_true(len(text) <= 66, 'virtual text should be truncated (got ' .. len(text) .. ' chars)')
+      assert_match('\.\.\.', text, 'should end with ellipsis')
+    endif
+  endfor
+
   execute 'bwipeout!' left
   execute 'bwipeout!' right
 })

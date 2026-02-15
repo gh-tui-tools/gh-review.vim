@@ -8,16 +8,19 @@ CONTENTS                                                  *gh-review-contents*
     3. Workflows ..................... |gh-review-workflows|
     4. Commands ...................... |gh-review-commands|
     5. Diff View .................... |gh-review-diff-view|
-    6. Signs ........................ |gh-review-signs|
+    6. Signs and Virtual Text ........ |gh-review-signs|
     7. Thread Buffer ................ |gh-review-thread-buffer|
     8. Files List ................... |gh-review-files-list|
+    9. Statusline ................... |gh-review-statusline|
+   10. Prompts ...................... |gh-review-prompts|
 
 ==============================================================================
 1. Introduction                                       *gh-review-introduction*
 
 gh-review.vim is a Vim 9.0+ plugin for reviewing GitHub pull requests.  It
 provides side-by-side diffs, review thread viewing and commenting, commit
-suggestions, and review submission -- all driven by the `gh` CLI.
+suggestions, and review submission -- all driven by the `gh` CLI.  It shares
+its design with gh-review.nvim, its Neovim counterpart.
 
 The goal of this plugin is to provide the simplest means possible for
 performing GitHub PR reviews.  It is designed for the use case where you
@@ -83,6 +86,7 @@ A quick-start sequence for either workflow: >
     <CR>                    Open a file’s side-by-side diff
     ]t / [t                 Jump between review threads
     gt                      View a thread
+    K                       Preview a thread (floating popup)
     gc                      Add a comment
     :GHReviewStart          Start a pending review (optional)
     :GHReviewSubmit         Submit the review
@@ -154,11 +158,15 @@ gs                      Create a suggestion at the cursor line (right buffer
                         suggestion.
 ]t                      Jump to the next review thread sign.
 [t                      Jump to the previous review thread sign.
+K                       Preview the thread at the cursor line in a floating
+                        popup.  Lighter than `gt` -- no split, no reply
+                        area.  Close with `q`, `<Esc>`, or click outside.
 gf                      Toggle the files list.
 q                       Close the diff view, returning to the files list.
+g?                      Show keymap help in a floating popup.
 
 ==============================================================================
-6. Signs                                                   *gh-review-signs*
+6. Signs and Virtual Text                                  *gh-review-signs*
 
 Review threads are indicated by signs in the sign column of diff buffers:
 
@@ -168,11 +176,24 @@ CR                      Resolved thread (green).
 CP                      Pending thread (yellow).  The thread contains a
                         comment from the current pending review.
 
+Each sign is accompanied by virtual text at end-of-line (via |prop_add()|
+with `text` and `text_align`) showing the first comment’s author and a
+truncated body (up to 60 characters), highlighted with `GHReviewVirtText`.
+This gives at-a-glance context without opening the thread.
+
 Signs are placed on the appropriate side (left or right buffer) depending on
 the thread’s diff side.  For outdated threads where the line number is no
 longer valid, the sign falls back to the original line number.
 
-Use `]t` and `[t` to jump between signs.
+Use `]t` and `[t` to jump between signs.  Use `K` to preview a thread in a
+floating popup.
+
+Highlight groups (all set with `default`, so user overrides take precedence):
+
+`GHReviewThread`          Sign column text for normal threads.
+`GHReviewThreadResolved`  Sign column text for resolved threads.
+`GHReviewThreadPending`   Sign column text for pending threads.
+`GHReviewVirtText`        Virtual text showing comment previews.
 
 ==============================================================================
 7. Thread Buffer                                     *gh-review-thread-buffer*
@@ -201,8 +222,17 @@ CTRL-S                  Submit the reply text (below the separator line).
 CTRL-R                  Resolve or unresolve the thread.
 q                       Close the thread buffer.
 CTRL-Q                  Close the thread buffer (works in insert mode too).
+g?                      Show keymap help in a floating popup.
 
 The thread buffer uses |'buftype'| `acwrite`, so |:w| also submits the reply.
+
+@-MENTION COMPLETION ~
+                                              *gh-review-thread-completion*
+
+The thread buffer sets |'omnifunc'| to a function that completes
+`@`-mentions from thread participants.  Trigger with CTRL-X CTRL-O in
+insert mode.  The completion list includes all unique comment authors
+across all review threads.
 
 ==============================================================================
 8. Files List                                           *gh-review-files-list*
@@ -223,6 +253,27 @@ Mappings:
 q                       Close the files list.
 gf                      Close the files list (same as q).
 R                       Refresh review threads from GitHub.
+g?                      Show keymap help in a floating popup.
+
+==============================================================================
+9. Statusline                                          *gh-review-statusline*
+
+The plugin provides a statusline component: >
+
+    &statusline ..= '%{gh_review#Statusline()}'
+<
+Returns an empty string when no review is active, or a summary like
+`PR #42 · reviewing · 4 threads`.
+
+==============================================================================
+10. Prompts                                              *gh-review-prompts*
+
+All user prompts use |popup_menu()| and |confirm()| instead of the legacy
+|inputlist()| / |input()|:
+
+- Submit review action: a popup menu with Comment, Approve, Request changes.
+- Discard confirmation, checkout confirmation, external file change reload:
+  yes/no confirmation dialogs.
 
 ==============================================================================
  vim:tw=78:ts=8:ft=help:norl:

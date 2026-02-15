@@ -472,6 +472,69 @@ g:RunTest('Thread buffer: header area is read-only', () => {
   CleanupDiffBuffers()
 })
 
+
+g:RunTest('Thread buffer: omnifunc is set', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads(g:MockThreadNodes())
+  SetupDiffBuffers('src/new_file.ts', 30)
+  state.SetDiffPath('src/new_file.ts')
+
+  thread.Open('thread_1')
+  var bufnr = state.GetThreadBufnr()
+  assert_equal('GHReviewThreadOmnifunc', getbufvar(bufnr, '&omnifunc'))
+
+  thread.CloseThreadBuffer()
+  CleanupDiffBuffers()
+})
+
+g:RunTest('Thread omnifunc: findstart locates @ symbol', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads(g:MockThreadNodes())
+  SetupDiffBuffers('src/new_file.ts', 30)
+  state.SetDiffPath('src/new_file.ts')
+
+  thread.Open('thread_1')
+  var bufnr = state.GetThreadBufnr()
+  var reply_start = getbufvar(bufnr, 'gh_review_reply_start')
+
+  # Put text with @ in reply area
+  var winid = bufwinid(bufnr)
+  win_gotoid(winid)
+  cursor(reply_start, 1)
+  execute "doautocmd CursorMoved"
+  setbufline(bufnr, reply_start, '@ali')
+  cursor(reply_start, 5)
+
+  var result = call('GHReviewThreadOmnifunc', [1, ''])
+  # Should find the @ at column 1 and return col 1 (after the @)
+  assert_equal(1, result)
+
+  thread.CloseThreadBuffer()
+  CleanupDiffBuffers()
+})
+
+g:RunTest('Thread omnifunc: base filtering returns matching participants', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads(g:MockThreadNodes())
+  SetupDiffBuffers('src/new_file.ts', 30)
+  state.SetDiffPath('src/new_file.ts')
+
+  thread.Open('thread_1')
+
+  var matches = call('GHReviewThreadOmnifunc', [0, 'al'])
+  assert_equal(1, len(matches))
+  assert_equal('alice', matches[0])
+
+  var all_matches = call('GHReviewThreadOmnifunc', [0, ''])
+  assert_equal(2, len(all_matches))
+
+  thread.CloseThreadBuffer()
+  CleanupDiffBuffers()
+})
+
 # --- Write results and exit ---
 
 g:WriteResults('/tmp/gh_review_test_thread.txt')

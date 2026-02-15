@@ -34,6 +34,7 @@ sign define gh_review_thread_pending text=CP texthl=GHReviewThreadPending linehl
 highlight default GHReviewThread ctermfg=Blue guifg=#58a6ff
 highlight default GHReviewThreadResolved ctermfg=Green guifg=#3fb950
 highlight default GHReviewThreadPending ctermfg=Yellow guifg=#d29922
+highlight default GHReviewVirtText ctermfg=Gray guifg=#8b949e cterm=italic gui=italic
 
 # --- Fold guard for diff buffers ---
 # Plugins (LSP, linters, etc.) may asynchronously override foldmethod on

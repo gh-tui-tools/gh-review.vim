@@ -266,6 +266,21 @@ export def SetRepoInfo(owner: string, name: string)
   repo_name = name
 enddef
 
+# Return unique sorted author logins from all thread comments.
+export def GetParticipants(): list<string>
+  var seen: dict<bool> = {}
+  for t in values(threads)
+    var comments = get(get(t, 'comments', {}), 'nodes', [])
+    for c in comments
+      var login = get(get(c, 'author', {}), 'login', '')
+      if !empty(login)
+        seen[login] = true
+      endif
+    endfor
+  endfor
+  return sort(keys(seen))
+enddef
+
 # ------- Reset -------
 
 export def Reset()

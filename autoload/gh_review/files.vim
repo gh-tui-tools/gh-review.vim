@@ -84,6 +84,31 @@ def SetupBuffer()
   nnoremap <buffer> <silent> q <ScriptCmd>Close()<CR>
   nnoremap <buffer> <silent> gf <ScriptCmd>Close()<CR>
   nnoremap <buffer> <silent> R <ScriptCmd>RefreshAndRender()<CR>
+  nnoremap <buffer> <silent> g? <ScriptCmd>ShowFilesHelp()<CR>
+enddef
+
+def ShowFilesHelp()
+  var help = [
+    ' Files keymaps',
+    ' ' .. repeat("─", 40),
+    '  <CR>    Open diff',
+    '  q       Close files list',
+    '  gf      Close files list',
+    '  R       Refresh threads',
+    '  g?      This help',
+  ]
+  popup_atcursor(help, {
+    border: [],
+    padding: [0, 1, 0, 1],
+    close: 'click',
+    filter: (winid, key) => {
+      if key == 'q' || key == "\<Esc>"
+        popup_close(winid)
+        return true
+      endif
+      return false
+    },
+  })
 enddef
 
 def RefreshAndRender()

@@ -7,6 +7,7 @@ execute 'source ' .. test_dir .. '/helpers.vim'
 execute 'source ' .. test_dir .. '/fixtures.vim'
 
 import autoload 'gh_review/state.vim'
+import autoload 'gh_review.vim' as orchestrator
 
 # --- Tests ---
 
@@ -228,6 +229,71 @@ g:RunTest('SetThreads with empty list produces empty threads', () => {
   assert_equal({}, state.GetThreads())
   assert_equal([], state.GetThreadsForFile('any/file.ts'))
   assert_equal({}, state.GetThread('nonexistent'))
+})
+
+
+g:RunTest('GetParticipants extracts unique sorted logins', () => {
+  state.Reset()
+  state.SetThreads(g:MockThreadNodes())
+
+  var participants = state.GetParticipants()
+  assert_equal(2, len(participants))
+  assert_equal('alice', participants[0])
+  assert_equal('bob', participants[1])
+})
+
+g:RunTest('GetParticipants returns empty for no threads', () => {
+  state.Reset()
+  state.SetThreads([])
+
+  var participants = state.GetParticipants()
+  assert_equal(0, len(participants))
+})
+
+g:RunTest('Statusline returns empty when no PR loaded', () => {
+  state.Reset()
+  assert_equal('', orchestrator.Statusline())
+})
+
+g:RunTest('Statusline shows PR number when loaded', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads(g:MockThreadNodes())
+  var result = orchestrator.Statusline()
+  assert_match('PR #42', result)
+  assert_match('4 threads', result)
+})
+
+g:RunTest('Statusline shows reviewing when review active', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads([])
+  var result = orchestrator.Statusline()
+  assert_match('reviewing', result)
+})
+
+g:RunTest('Statusline omits reviewing when no pending review', () => {
+  state.Reset()
+  var data = g:MockPRData()
+  data.data.repository.pullRequest.reviews.nodes = []
+  state.SetPR(data)
+  state.SetThreads([])
+  var result = orchestrator.Statusline()
+  assert_match('PR #42', result)
+  assert_true(result !~# 'reviewing', 'should not contain reviewing')
+})
+
+g:RunTest('Statusline singular thread', () => {
+  state.Reset()
+  var data = g:MockPRData()
+  data.data.repository.pullRequest.reviews.nodes = []
+  state.SetPR(data)
+  state.SetThreads([
+    {id: 't1', isResolved: false, line: 1, diffSide: 'RIGHT', path: 'x.ts', comments: {nodes: []}},
+  ])
+  var result = orchestrator.Statusline()
+  assert_match('1 thread', result)
+  assert_true(result !~# 'threads', 'should be singular')
 })
 
 # --- Write results and exit ---

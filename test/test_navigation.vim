@@ -18,6 +18,7 @@ def SetupBuffer(name: string, num_lines: number): number
   var bufnr = bufnr(name, true)
   execute 'buffer' bufnr
   setlocal buftype=nofile
+  setlocal bufhidden=hide
   setlocal noswapfile
   setlocal modifiable
   var lines: list<string> = []

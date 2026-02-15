@@ -153,6 +153,10 @@ def ShowThread(t: dict<any>)
   nnoremap <buffer> <silent> q <ScriptCmd>CloseThreadBuffer()<CR>
   nnoremap <buffer> <silent> <C-q> <ScriptCmd>CloseThreadBuffer()<CR>
   inoremap <buffer> <silent> <C-q> <Esc><ScriptCmd>CloseThreadBuffer()<CR>
+  nnoremap <buffer> <silent> g? <ScriptCmd>ShowThreadHelp()<CR>
+
+  # @-mention completion via omnifunc
+  setlocal omnifunc=GHReviewThreadOmnifunc
 
   # Position cursor at the reply area
   if !empty(initial_body)
@@ -364,6 +368,55 @@ def ToggleResolve()
       echoerr '[gh-review] Failed to ' .. (is_resolved ? 'unresolve' : 'resolve') .. ' thread'
     endif
   })
+enddef
+
+def ShowThreadHelp()
+  var help = [
+    ' Thread keymaps',
+    ' ' .. repeat("─", 40),
+    '  Ctrl-S    Submit reply',
+    '  Ctrl-R    Toggle resolved',
+    '  q         Close thread',
+    '  Ctrl-Q    Close thread (insert mode)',
+    '  Ctrl-X Ctrl-O  @-mention completion',
+    '  g?        This help',
+  ]
+  popup_atcursor(help, {
+    border: [],
+    padding: [0, 1, 0, 1],
+    close: 'click',
+    filter: (winid, key) => {
+      if key == 'q' || key == "\<Esc>"
+        popup_close(winid)
+        return true
+      endif
+      return false
+    },
+  })
+enddef
+
+# Omnifunc for @-mention completion in thread reply buffer.
+# This is a global function because omnifunc requires it.
+def g:GHReviewThreadOmnifunc(findstart: number, base: string): any
+  if findstart
+    var line_text = getline('.')
+    var col = col('.') - 1
+    while col > 0 && line_text[col - 1] != '@'
+      col -= 1
+    endwhile
+    if col > 0 && line_text[col - 1] == '@'
+      return col
+    endif
+    return -2
+  endif
+  var participants = state.GetParticipants()
+  var matches: list<string> = []
+  for p in participants
+    if p =~? '^' .. base
+      add(matches, p)
+    endif
+  endfor
+  return matches
 enddef
 
 export def CloseThreadBuffer()
