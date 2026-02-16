@@ -240,6 +240,27 @@ def ShowDiff(path: string, left_content: list<string>, right_content: list<strin
   # Position cursor in the right (head) window at the top
   win_gotoid(bufwinid(right_bufnr))
   normal! gg
+
+  # Workaround: foldmethod=diff with closed folds prevents syntax
+  # concealing from rendering.  Opening all folds, forcing a redraw,
+  # then re-closing them refreshes the conceal state.
+  var lbuf = left_bufnr
+  var rbuf = right_bufnr
+  timer_start(50, (_) => {
+    for bid in [lbuf, rbuf]
+      var wid = bufwinid(bid)
+      if wid != -1
+        win_execute(wid, 'normal! zR')
+      endif
+    endfor
+    redraw
+    for bid in [lbuf, rbuf]
+      var wid = bufwinid(bid)
+      if wid != -1
+        win_execute(wid, 'normal! zM')
+      endif
+    endfor
+  })
 enddef
 
 def WriteBuffer(bufnr: number, path: string)
