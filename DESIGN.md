@@ -200,7 +200,7 @@ When `is_local_checkout` is true, the right buffer is set up with:
 
 #### Concealing
 
-Syntax concealing (e.g., hiding markdown link URLs) works when `conceallevel` is set and the syntax file defines `conceal` rules. However, both Vim and Neovim have a rendering bug where `foldmethod=diff` with closed folds prevents concealing from rendering on visible lines — even though the conceal rules are active and `conceallevel` is set (vim/vim#19423, neovim/neovim#37893).
+Syntax concealing (e.g., hiding markdown link URLs) works when `conceallevel` is set and the syntax file defines `conceal` rules. In practice, `foldmethod=diff` with closed folds can sometimes prevent concealing from rendering until folds are cycled.
 
 `ShowDiff()` works around this by deferring a fold cycle after the initial render: open all folds (`zR`), force a `redraw`, then re-close all folds (`zM`). The redraw between open and close is essential — without it, the workaround has no effect. This runs via `timer_start(50, ...)` to let the initial diff render complete first.
 
