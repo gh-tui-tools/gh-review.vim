@@ -383,6 +383,7 @@ def SetupDiffBuffer(bufnr: number, name: string, path: string, content: list<str
   nnoremap <buffer> <silent> gs <ScriptCmd>CreateSuggestionAtCursor()<CR>
   xnoremap <buffer> <silent> gs <ScriptCmd>CreateSuggestionVisual()<CR>
   nnoremap <buffer> <silent> gf <ScriptCmd>files.Toggle()<CR>
+  nnoremap <buffer> <silent> gF <ScriptCmd>GotoFile()<CR>
   nnoremap <buffer> <silent> q <ScriptCmd>CloseDiff()<CR>
   nnoremap <buffer> <silent> K <ScriptCmd>PreviewThreadAtCursor()<CR>
   nnoremap <buffer> <silent> g? <ScriptCmd>ShowDiffHelp()<CR>
@@ -672,6 +673,7 @@ def ShowDiffHelp()
     '  [t    Previous thread',
     '  K     Preview thread',
     '  gf    Toggle files list',
+    '  gF    Go to file (checkout only)',
     '  q     Close diff',
     '  g?    This help',
   ]
@@ -687,6 +689,34 @@ def ShowDiffHelp()
       return false
     },
   })
+enddef
+
+export def GotoFile()
+  if !state.IsLocalCheckout()
+    echo 'gF requires a local checkout review'
+    return
+  endif
+  if GetCurrentSide() !=# 'RIGHT'
+    echo 'gF works from the right (head) buffer only'
+    return
+  endif
+
+  var lnum = line('.')
+  var path = state.GetDiffPath()
+  var right = state.GetRightBufnr()
+  var winid = right != -1 ? bufwinid(right) : -1
+
+  CloseDiff()
+
+  if winid != -1 && win_id2win(winid) > 0
+    win_gotoid(winid)
+  endif
+  execute 'edit ' .. fnameescape(path)
+  var line_count = line('$')
+  if lnum > line_count
+    lnum = line_count
+  endif
+  cursor(lnum, 1)
 enddef
 
 export def CloseDiff()

@@ -42,6 +42,7 @@ The checkout workflow is typically used by a project maintainer reviewing a cont
 | `:w` writes to working tree      | Yes             | No          |
 | External change detection        | Yes (mtime tracking) | N/A    |
 | Push changes to PR branch        | Yes (`git push`) | No         |
+| Jump to file from diff (`gF`)    | Yes             | No          |
 | Add review comments              | Yes             | Yes         |
 | Commit suggestions (`gs`)        | Yes             | Yes         |
 | Resolve/unresolve threads        | Yes             | Yes         |
@@ -245,6 +246,7 @@ Both diff windows display a window-local statusline (via `setwinvar(winid, “&s
 | `[t`  | Jump to previous thread sign                        |
 | `K`   | Preview thread at cursor (floating popup)           |
 | `gf`  | Toggle the files list                               |
+| `gF`  | Go to file at cursor line (checkout only)           |
 | `q`   | Close the diff view                                 |
 | `g?`  | Show keymap help                                    |
 

@@ -78,6 +78,7 @@ When the URL refers to a different repo than the current working directory, no c
 gt                      View a thread
 K                       Preview a thread (floating popup)
 gc                      Add a comment
+gF                      Jump to the file (checkout only)
 g?                      Show keymap help
 :GHReviewSubmit         Submit a review
 :GHReviewClose          Close all review buffers
@@ -105,6 +106,7 @@ g?                      Show keymap help
 | `[t`  | Jump to the previous review thread                    |
 | `K`   | Preview the thread at cursor (floating popup)         |
 | `gf`  | Toggle the files list                                 |
+| `gF`  | Go to file at cursor line (checkout only)              |
 | `q`   | Close the diff view                                   |
 | `g?`  | Show keymap help                                      |
 
