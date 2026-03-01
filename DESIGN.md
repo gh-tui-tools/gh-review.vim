@@ -309,6 +309,10 @@ User prompts use `popup_menu()` and `confirm()` instead of the legacy `inputlist
 - **Checkout confirmation**: `confirm()` for branch checkout.
 - **External file reload**: `confirm()` for disk-change detection.
 
+#### Reactions
+
+Comment reactions from GitHub are displayed after each comment body as emoji with counts (e.g. 👍 3  🎉 1). The `reactionGroups` field is fetched in the GraphQL queries and rendered by `FormatReactions()` in both `thread.vim` (thread buffer) and `diff.vim` (floating preview). Reactions are read-only.
+
 ### Statusline component
 
 `gh_review#Statusline()` returns an empty string when no review is active, or a summary like `PR #42 · reviewing · 4 threads`. Users can call this from their `statusline` expression.

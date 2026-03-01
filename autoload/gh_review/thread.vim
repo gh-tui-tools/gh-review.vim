@@ -88,6 +88,10 @@ def ShowThread(t: dict<any>)
     for bl in body_lines
       add(lines, '  ' .. bl)
     endfor
+    var reaction_line = FormatReactions(c)
+    if !empty(reaction_line)
+      add(lines, reaction_line)
+    endif
     add(lines, '')
   endfor
 
@@ -181,6 +185,37 @@ enddef
 def FormatDate(iso_date: string): string
   # "2024-01-15T10:30:00Z" -> "2024-01-15"
   return substitute(iso_date, 'T.*', '', '')
+enddef
+
+const REACTION_EMOJI: dict<string> = {
+  THUMBS_UP: '👍',
+  THUMBS_DOWN: '👎',
+  LAUGH: '😄',
+  HOORAY: '🎉',
+  CONFUSED: '😕',
+  HEART: '❤️',
+  ROCKET: '🚀',
+  EYES: '👀',
+}
+
+def FormatReactions(comment: dict<any>): string
+  var groups = get(comment, 'reactionGroups', [])
+  if type(groups) != v:t_list || empty(groups)
+    return ''
+  endif
+  var parts: list<string> = []
+  for g in groups
+    var rtype = get(g, 'content', '')
+    var cnt = get(get(g, 'reactors', {}), 'totalCount', 0)
+    if cnt > 0
+      var emoji = get(REACTION_EMOJI, rtype, rtype)
+      add(parts, emoji .. ' ' .. cnt)
+    endif
+  endfor
+  if empty(parts)
+    return ''
+  endif
+  return '  ' .. join(parts, '  ')
 enddef
 
 def GetReplyText(): string

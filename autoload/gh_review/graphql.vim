@@ -51,6 +51,12 @@ var query_pr_details_lines =<< trim GRAPHQL
                   id
                   state
                 }
+                reactionGroups {
+                  content
+                  reactors(first: 0) {
+                    totalCount
+                  }
+                }
               }
             }
           }
@@ -94,6 +100,12 @@ var query_review_threads_lines =<< trim GRAPHQL
                 pullRequestReview {
                   id
                   state
+                }
+                reactionGroups {
+                  content
+                  reactors(first: 0) {
+                    totalCount
+                  }
                 }
               }
             }

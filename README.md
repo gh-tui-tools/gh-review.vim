@@ -131,6 +131,8 @@ g?                      Show keymap help
 
 Each sign is accompanied by virtual text at end-of-line showing the first comment’s author and a truncated body — giving at-a-glance context without opening the thread.
 
+Comment reactions are displayed as emoji with counts after each comment body in the thread buffer and floating preview.
+
 ## Prompts
 
 All prompts (submit review, discard review, checkout, file reload) use `popup_menu()` and `confirm()` for a modern UI — no raw `inputlist()` or `input()`.

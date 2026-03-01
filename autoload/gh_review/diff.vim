@@ -14,6 +14,38 @@ if empty(prop_type_get('gh_review_virt_text'))
   prop_type_add('gh_review_virt_text', {highlight: 'GHReviewVirtText'})
 endif
 
+# Reaction emoji for comment display
+const REACTION_EMOJI: dict<string> = {
+  THUMBS_UP: '👍',
+  THUMBS_DOWN: '👎',
+  LAUGH: '😄',
+  HOORAY: '🎉',
+  CONFUSED: '😕',
+  HEART: '❤️',
+  ROCKET: '🚀',
+  EYES: '👀',
+}
+
+def FormatReactions(comment: dict<any>): string
+  var groups = get(comment, 'reactionGroups', [])
+  if type(groups) != v:t_list || empty(groups)
+    return ''
+  endif
+  var parts: list<string> = []
+  for g in groups
+    var rtype = get(g, 'content', '')
+    var cnt = get(get(g, 'reactors', {}), 'totalCount', 0)
+    if cnt > 0
+      var emoji = get(REACTION_EMOJI, rtype, rtype)
+      add(parts, emoji .. ' ' .. cnt)
+    endif
+  endfor
+  if empty(parts)
+    return ''
+  endif
+  return '  ' .. join(parts, '  ')
+enddef
+
 # Floating preview state
 var preview_winid: number = -1
 
@@ -631,6 +663,10 @@ def PreviewThreadAtCursor()
     for bl in body_lines
       add(content, '  ' .. bl)
     endfor
+    var reaction_line = FormatReactions(c)
+    if !empty(reaction_line)
+      add(content, reaction_line)
+    endif
   endfor
 
   var max_width = 10
