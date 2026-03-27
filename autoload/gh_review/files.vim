@@ -80,11 +80,11 @@ def SetupBuffer()
   setlocal winfixheight
 
   # Keymaps
-  nnoremap <buffer> <silent> <CR> <ScriptCmd>OpenFileUnderCursor()<CR>
-  nnoremap <buffer> <silent> q <ScriptCmd>Close()<CR>
-  nnoremap <buffer> <silent> gf <ScriptCmd>Close()<CR>
-  nnoremap <buffer> <silent> R <ScriptCmd>RefreshAndRender()<CR>
-  nnoremap <buffer> <silent> g? <ScriptCmd>ShowFilesHelp()<CR>
+  nnoremap <nowait> <buffer> <CR> <ScriptCmd>OpenFileUnderCursor()<CR>
+  nnoremap <nowait> <buffer> q <ScriptCmd>Close()<CR>
+  nnoremap <nowait> <buffer> gf <ScriptCmd>Close()<CR>
+  nnoremap <nowait> <buffer> R <ScriptCmd>RefreshAndRender()<CR>
+  nnoremap <nowait> <buffer> g? <ScriptCmd>ShowFilesHelp()<CR>
 enddef
 
 def ShowFilesHelp()
