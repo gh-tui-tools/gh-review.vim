@@ -407,18 +407,18 @@ def SetupDiffBuffer(bufnr: number, name: string, path: string, content: list<str
   b:gh_review_diff = true
 
   # Diff-buffer-local keymaps
-  nnoremap <buffer> <silent> gt <ScriptCmd>OpenThreadAtCursor()<CR>
-  nnoremap <buffer> <silent> gc <ScriptCmd>CreateCommentAtCursor()<CR>
-  xnoremap <buffer> <silent> gc <ScriptCmd>CreateCommentVisual()<CR>
-  nnoremap <buffer> <silent> ]t <ScriptCmd>JumpToNextThread()<CR>
-  nnoremap <buffer> <silent> [t <ScriptCmd>JumpToPrevThread()<CR>
-  nnoremap <buffer> <silent> gs <ScriptCmd>CreateSuggestionAtCursor()<CR>
-  xnoremap <buffer> <silent> gs <ScriptCmd>CreateSuggestionVisual()<CR>
-  nnoremap <buffer> <silent> gf <ScriptCmd>files.Toggle()<CR>
-  nnoremap <buffer> <silent> gF <ScriptCmd>GotoFile()<CR>
-  nnoremap <buffer> <silent> q <ScriptCmd>CloseDiff()<CR>
-  nnoremap <buffer> <silent> K <ScriptCmd>PreviewThreadAtCursor()<CR>
-  nnoremap <buffer> <silent> g? <ScriptCmd>ShowDiffHelp()<CR>
+  nnoremap <nowait> <buffer> gt <ScriptCmd>OpenThreadAtCursor()<CR>
+  nnoremap <nowait> <buffer> gc <ScriptCmd>CreateCommentAtCursor()<CR>
+  xnoremap <nowait> <buffer> gc <ScriptCmd>CreateCommentVisual()<CR>
+  nnoremap <nowait> <buffer> ]t <ScriptCmd>JumpToNextThread()<CR>
+  nnoremap <nowait> <buffer> [t <ScriptCmd>JumpToPrevThread()<CR>
+  nnoremap <nowait> <buffer> gs <ScriptCmd>CreateSuggestionAtCursor()<CR>
+  xnoremap <nowait> <buffer> gs <ScriptCmd>CreateSuggestionVisual()<CR>
+  nnoremap <nowait> <buffer> gf <ScriptCmd>files.Toggle()<CR>
+  nnoremap <nowait> <buffer> gF <ScriptCmd>GotoFile()<CR>
+  nnoremap <nowait> <buffer> q <ScriptCmd>CloseDiff()<CR>
+  nnoremap <nowait> <buffer> K <ScriptCmd>PreviewThreadAtCursor()<CR>
+  nnoremap <nowait> <buffer> g? <ScriptCmd>ShowDiffHelp()<CR>
 enddef
 
 def GetCurrentSide(): string

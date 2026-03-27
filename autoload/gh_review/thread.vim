@@ -151,13 +151,13 @@ def ShowThread(t: dict<any>)
   augroup END
 
   # Keymaps
-  nnoremap <buffer> <silent> <C-s> <ScriptCmd>SubmitReply()<CR>
-  inoremap <buffer> <silent> <C-s> <Esc><ScriptCmd>SubmitReply()<CR>
-  nnoremap <buffer> <silent> <C-r> <ScriptCmd>ToggleResolve()<CR>
-  nnoremap <buffer> <silent> q <ScriptCmd>CloseThreadBuffer()<CR>
-  nnoremap <buffer> <silent> <C-q> <ScriptCmd>CloseThreadBuffer()<CR>
-  inoremap <buffer> <silent> <C-q> <Esc><ScriptCmd>CloseThreadBuffer()<CR>
-  nnoremap <buffer> <silent> g? <ScriptCmd>ShowThreadHelp()<CR>
+  nnoremap <nowait> <buffer> <C-s> <ScriptCmd>SubmitReply()<CR>
+  inoremap <nowait> <buffer> <C-s> <Esc><ScriptCmd>SubmitReply()<CR>
+  nnoremap <nowait> <buffer> <C-r> <ScriptCmd>ToggleResolve()<CR>
+  nnoremap <nowait> <buffer> q <ScriptCmd>CloseThreadBuffer()<CR>
+  nnoremap <nowait> <buffer> <C-q> <ScriptCmd>CloseThreadBuffer()<CR>
+  inoremap <nowait> <buffer> <C-q> <Esc><ScriptCmd>CloseThreadBuffer()<CR>
+  nnoremap <nowait> <buffer> g? <ScriptCmd>ShowThreadHelp()<CR>
 
   # @-mention completion via omnifunc
   setlocal omnifunc=GHReviewThreadOmnifunc
