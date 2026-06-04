@@ -235,30 +235,24 @@ enddef
 # ------- Repo detection -------
 
 export def GetRepoInfo(): bool
-  var remote = trim(system('git remote get-url origin 2>/dev/null'))
+  var json = trim(system('gh repo view --json owner,name 2>&1'))
   if v:shell_error != 0
-    echoerr '[gh-review] Not in a git repository or no origin remote'
+    echoerr '[gh-review] ' .. trim(json)
     return false
   endif
-
-  # Parse SSH format: git@github.com:owner/name.git
-  var ssh_match = matchlist(remote, 'git@github\.com:\([^/]\+\)/\([^/]\+\)')
-  if !empty(ssh_match)
-    repo_owner = ssh_match[1]
-    repo_name = substitute(ssh_match[2], '\.git$', '', '')
-    return true
+  try
+    var parsed = json_decode(json)
+    repo_owner = get(get(parsed, 'owner', {}), 'login', '')
+    repo_name = get(parsed, 'name', '')
+  catch
+    echoerr '[gh-review] Could not parse repository info from `gh`'
+    return false
+  endtry
+  if empty(repo_owner) || empty(repo_name)
+    echoerr '[gh-review] Could not detect repository owner or name'
+    return false
   endif
-
-  # Parse HTTPS format: https://github.com/owner/name.git
-  var https_match = matchlist(remote, 'github\.com/\([^/]\+\)/\([^/]\+\)')
-  if !empty(https_match)
-    repo_owner = https_match[1]
-    repo_name = substitute(https_match[2], '\.git$', '', '')
-    return true
-  endif
-
-  echoerr '[gh-review] Could not parse GitHub remote URL: ' .. remote
-  return false
+  return true
 enddef
 
 export def SetRepoInfo(owner: string, name: string)
