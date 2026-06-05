@@ -4,6 +4,7 @@ vim9script
 
 import autoload 'gh_review/state.vim'
 import autoload 'gh_review/diff.vim'
+import autoload 'gh_review.vim' as orchestrator
 
 const BUF_NAME = 'gh-review://files'
 
@@ -112,7 +113,6 @@ def ShowFilesHelp()
 enddef
 
 def RefreshAndRender()
-  import autoload 'gh_review.vim' as orchestrator
   orchestrator.RefreshThreads()
 enddef
 
