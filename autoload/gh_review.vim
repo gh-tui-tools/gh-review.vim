@@ -295,8 +295,7 @@ export def SubmitReview()
         if state.IsReviewActive()
           var vars: dict<any> = {
             reviewId: state.GetPendingReviewId(),
-            event: event,
-          }
+            event: event}
           if !empty(body)
             vars.body = body
           endif
@@ -314,8 +313,7 @@ export def SubmitReview()
         else
           var vars: dict<any> = {
             pullRequestId: state.GetPRId(),
-            event: event,
-          }
+            event: event}
           if !empty(body)
             vars.body = body
           endif
