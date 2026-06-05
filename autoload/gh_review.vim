@@ -204,7 +204,7 @@ def FetchMergeBase(Callback: func())
 
   # Try local git merge-base first
   var merge_base = trim(system(printf('git merge-base %s %s 2>/dev/null',
-    shellescape('origin/' .. base), shellescape('origin/' .. head))))
+    shellescape(state.GetBaseOid()), shellescape(state.GetHeadOid()))))
 
   if v:shell_error == 0 && !empty(merge_base)
     state.SetMergeBaseOid(merge_base)
