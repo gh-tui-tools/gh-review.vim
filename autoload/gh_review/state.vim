@@ -18,6 +18,7 @@ var merge_base_oid: string = ''
 # Repo info
 var repo_owner: string = ''
 var repo_name: string = ''
+var repo_remote: string = ''
 
 # Changed files: list of dicts with path, additions, deletions, changeType
 var changed_files: list<dict<any>> = []
@@ -95,6 +96,10 @@ enddef
 
 export def GetName(): string
   return repo_name
+enddef
+
+export def GetRemote(): string
+  return repo_remote
 enddef
 
 export def GetChangedFiles(): list<dict<any>>
@@ -234,6 +239,21 @@ enddef
 
 # ------- Repo detection -------
 
+def DetectRemote(owner: string, name: string)
+  repo_remote = ''
+  var pattern = '\V' .. escape(owner .. '/' .. name, '\')
+  var lines = split(system('git remote -v 2>/dev/null'), "\n")
+  for l in lines
+    if l =~# pattern && l =~# '(fetch)'
+      repo_remote = matchstr(l, '^\S\+')
+      break
+    endif
+  endfor
+  if empty(repo_remote)
+    repo_remote = matchstr(get(lines, 0, 'origin'), '^\S\+')
+  endif
+enddef
+
 export def GetRepoInfo(): bool
   var json = trim(system('gh repo view --json owner,name 2>&1'))
   if v:shell_error != 0
@@ -252,12 +272,14 @@ export def GetRepoInfo(): bool
     echoerr '[gh-review] Could not detect repository owner or name'
     return false
   endif
+  DetectRemote(repo_owner, repo_name)
   return true
 enddef
 
 export def SetRepoInfo(owner: string, name: string)
   repo_owner = owner
   repo_name = name
+  DetectRemote(owner, name)
 enddef
 
 # Return unique sorted author logins from all thread comments.
@@ -291,6 +313,7 @@ export def Reset()
   merge_base_oid = ''
   repo_owner = ''
   repo_name = ''
+  repo_remote = ''
   changed_files = []
   threads = {}
   pending_review_id = ''

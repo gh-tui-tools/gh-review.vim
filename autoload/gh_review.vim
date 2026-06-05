@@ -108,7 +108,7 @@ export def Open(pr_number_str: string = '')
       # Check out the PR branch locally via GitHub pull refs (works for forks
       # without needing a fork remote).
       var fetch_ref = printf('pull/%d/head', pr_number)
-      api.RunCmdAsync(['git', 'fetch', 'origin', fetch_ref], (fo, fe, fetch_exit) => {
+      api.RunCmdAsync(['git', 'fetch', state.GetRemote(), fetch_ref], (fo, fe, fetch_exit) => {
         if fetch_exit != 0
           echohl WarningMsg
           echomsg '[gh-review] Could not fetch PR branch: ' .. trim(fe)
@@ -137,7 +137,8 @@ export def Open(pr_number_str: string = '')
 enddef
 
 def IsLocalRepo(owner: string, name: string): bool
-  var remote = trim(system('git remote get-url origin 2>/dev/null'))
+  var remote_name = state.GetRemote()
+  var remote = trim(system('git remote get-url ' .. shellescape(remote_name) .. ' 2>/dev/null'))
   if v:shell_error != 0
     return false
   endif
@@ -152,17 +153,17 @@ def SetupPushTracking(local_branch: string)
 
   var remote: string
   if head_owner ==# repo_owner
-    remote = 'origin'
+    remote = state.GetRemote()
   else
     # Fork PR — ensure a remote exists for the fork.
     remote = head_owner
     var remote_url = trim(system('git remote get-url '
       .. shellescape(remote) .. ' 2>/dev/null'))
     if v:shell_error != 0
-      # Add remote, matching origin’s protocol (SSH vs HTTPS).
-      var origin_url = trim(system('git remote get-url origin'))
+      # Add remote, matching base remote's protocol (SSH vs HTTPS).
+      var base_url = trim(system('git remote get-url ' .. shellescape(state.GetRemote())))
       var fork_url: string
-      if origin_url =~# '^git@'
+      if base_url =~# '^git@'
         fork_url = printf('git@github.com:%s/%s.git', head_owner, head_name)
       else
         fork_url = printf('https://github.com/%s/%s.git', head_owner, head_name)
