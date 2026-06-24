@@ -126,6 +126,7 @@ def Render()
   add(lines, printf('Files changed (%d)', len(files)))
   add(lines, '')
 
+  var current_path = state.GetDiffPath()
   for f in files
     var status = ChangeTypeToFlag(get(f, 'changeType', 'MODIFIED'))
     var additions = get(f, 'additions', 0)
@@ -137,7 +138,8 @@ def Render()
     var thread_count = len(file_threads)
     var thread_info = thread_count > 0 ? printf('  [%d thread%s]', thread_count, thread_count > 1 ? 's' : '') : ''
 
-    add(lines, printf('  +%-4d -%-4d %s  %s%s', additions, deletions, status, path, thread_info))
+    var marker = path ==# current_path ? '> ' : '  '
+    add(lines, printf('%s+%-4d -%-4d %s  %s%s', marker, additions, deletions, status, path, thread_info))
   endfor
 
   setlocal modifiable
@@ -145,8 +147,23 @@ def Render()
   setbufline(state.GetFilesBufnr(), 1, lines)
   setlocal nomodifiable
 
-  # Position cursor on first file line
-  cursor(4, 1)
+  # Position cursor on the open file, or the first file line.
+  cursor(CurrentFileLine(), 1)
+enddef
+
+# Line number of the currently open file in the list, or the first file line.
+def CurrentFileLine(): number
+  var current_path = state.GetDiffPath()
+  if empty(current_path)
+    return 4
+  endif
+  var files = state.GetChangedFiles()
+  for i in range(len(files))
+    if get(files[i], 'path', '') ==# current_path
+      return i + 4
+    endif
+  endfor
+  return 4
 enddef
 
 export def Rerender()
@@ -157,6 +174,7 @@ export def Rerender()
       var save_winid = win_getid()
       win_gotoid(winid)
       Render()
+      normal! zz
       win_gotoid(save_winid)
     endif
   endif

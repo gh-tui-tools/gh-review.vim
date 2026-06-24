@@ -84,6 +84,7 @@ A quick-start sequence for either workflow: >
 
     :GHReview 123           Open PR #123 (or :GHReview {url})
     <CR>                    Open a file’s side-by-side diff
+    ]f / [f                 Step to the next/previous file’s diff
     ]t / [t                 Jump between review threads
     gt                      View a thread
     K                       Preview a thread (floating popup)
@@ -159,6 +160,10 @@ gs                      Create a suggestion at the cursor line (right buffer
                         suggestion.
 ]t                      Jump to the next review thread sign.
 [t                      Jump to the previous review thread sign.
+]f                      Open the diff for the next changed file (wraps
+                        around at the end of the list).
+[f                      Open the diff for the previous changed file (wraps
+                        around at the start of the list).
 K                       Preview the thread at the cursor line in a floating
                         popup.  Lighter than `gt` -- no split, no reply
                         area.  Close with `q`, `<Esc>`, or click outside.

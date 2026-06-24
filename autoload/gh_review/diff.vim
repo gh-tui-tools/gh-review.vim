@@ -269,6 +269,9 @@ def ShowDiff(path: string, left_content: list<string>, right_content: list<strin
     endif
   endif
 
+  # Keep the files list (if open) in sync with the current file.
+  files.Rerender()
+
   # Position cursor in the right (head) window at the top
   win_gotoid(bufwinid(right_bufnr))
   normal! gg
@@ -412,6 +415,8 @@ def SetupDiffBuffer(bufnr: number, name: string, path: string, content: list<str
   xnoremap <nowait> <buffer> gc <ScriptCmd>CreateCommentVisual()<CR>
   nnoremap <nowait> <buffer> ]t <ScriptCmd>JumpToNextThread()<CR>
   nnoremap <nowait> <buffer> [t <ScriptCmd>JumpToPrevThread()<CR>
+  nnoremap <nowait> <buffer> ]f <ScriptCmd>NextFile()<CR>
+  nnoremap <nowait> <buffer> [f <ScriptCmd>PrevFile()<CR>
   nnoremap <nowait> <buffer> gs <ScriptCmd>CreateSuggestionAtCursor()<CR>
   xnoremap <nowait> <buffer> gs <ScriptCmd>CreateSuggestionVisual()<CR>
   nnoremap <nowait> <buffer> gf <ScriptCmd>files.Toggle()<CR>
@@ -613,6 +618,33 @@ def JumpToPrevThread()
   endif
 enddef
 
+def CycleFile(delta: number)
+  var paths: list<string> = mapnew(state.GetChangedFiles(), (_, f) => get(f, 'path', ''))
+  var current: string = state.GetDiffPath()
+  var n = len(paths)
+  if n == 0
+    return
+  endif
+  var idx = index(paths, current)
+  if idx < 0
+    return
+  endif
+
+  var target = paths[((idx + delta) % n + n) % n]
+  if target ==# current
+    return
+  endif
+  Open(target)
+enddef
+
+def NextFile()
+  CycleFile(1)
+enddef
+
+def PrevFile()
+  CycleFile(-1)
+enddef
+
 def ClosePreview()
   if preview_winid != -1 && popup_getpos(preview_winid) != {}
     popup_close(preview_winid)
@@ -707,6 +739,8 @@ def ShowDiffHelp()
     '  gs    New suggestion (right only)',
     '  ]t    Next thread',
     '  [t    Previous thread',
+    '  ]f    Next file',
+    '  [f    Previous file',
     '  K     Preview thread',
     '  gf    Toggle files list',
     '  gF    Go to file (checkout only)',
