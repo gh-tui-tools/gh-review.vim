@@ -9,6 +9,7 @@ execute 'source ' .. test_dir .. '/fixtures.vim'
 
 import autoload 'gh_review/state.vim'
 import autoload 'gh_review/files.vim'
+import autoload 'gh_review/diff.vim'
 
 # --- Tests ---
 
@@ -228,6 +229,81 @@ g:RunTest('Files list: all change type flags rendered correctly', () => {
   assert_match('\sC\s', lines[7], 'COPIED should show C flag')
 
   files.Close()
+})
+
+g:RunTest('Files list: closing the diff clears the current-file marker', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads(g:MockThreadNodes())
+  state.SetRepoInfo('test-owner', 'test-repo')
+
+  files.Open()
+  var files_bufnr = state.GetFilesBufnr()
+  var files_winid = bufwinid(files_bufnr)
+
+  # Stand in for the diff windows ShowDiff() would have created
+  win_gotoid(files_winid)
+  aboveleft new
+  var right_bufnr = bufnr('gh-review://RIGHT/src/existing.ts', true)
+  execute 'buffer' right_bufnr
+  setlocal buftype=nofile
+  state.SetRightBufnr(right_bufnr)
+
+  aboveleft vnew
+  var left_bufnr = bufnr('gh-review://LEFT/src/existing.ts', true)
+  execute 'buffer' left_bufnr
+  setlocal buftype=nofile
+  state.SetLeftBufnr(left_bufnr)
+
+  state.SetDiffPath('src/existing.ts')
+  files.Rerender()
+  assert_match('^> ', getbufline(files_bufnr, 5)[0], 'open file should be marked while its diff is open')
+
+  diff.CloseDiff()
+
+  assert_notmatch('^> ', getbufline(files_bufnr, 5)[0], 'marker should be gone once the diff is closed')
+
+  files.Close()
+  execute 'bwipeout!' left_bufnr
+  execute 'bwipeout!' right_bufnr
+})
+
+g:RunTest('Files list: closing the diff keeps the cursor on that file', () => {
+  state.Reset()
+  state.SetPR(g:MockPRData())
+  state.SetThreads(g:MockThreadNodes())
+  state.SetRepoInfo('test-owner', 'test-repo')
+
+  files.Open()
+  var files_bufnr = state.GetFilesBufnr()
+  var files_winid = bufwinid(files_bufnr)
+
+  # Stand in for the diff windows ShowDiff() would have created
+  win_gotoid(files_winid)
+  aboveleft new
+  var right_bufnr = bufnr('gh-review://RIGHT/src/old_file.ts', true)
+  execute 'buffer' right_bufnr
+  setlocal buftype=nofile
+  state.SetRightBufnr(right_bufnr)
+
+  aboveleft vnew
+  var left_bufnr = bufnr('gh-review://LEFT/src/old_file.ts', true)
+  execute 'buffer' left_bufnr
+  setlocal buftype=nofile
+  state.SetLeftBufnr(left_bufnr)
+
+  # src/old_file.ts is the third file, so it renders on line 6
+  state.SetDiffPath('src/old_file.ts')
+  files.Rerender()
+  assert_equal(6, line('.', files_winid), 'cursor should sit on the open file')
+
+  diff.CloseDiff()
+
+  assert_equal(6, line('.', files_winid), 'cursor should stay on the file whose diff just closed')
+
+  files.Close()
+  execute 'bwipeout!' left_bufnr
+  execute 'bwipeout!' right_bufnr
 })
 
 # --- Write results and exit ---

@@ -142,28 +142,31 @@ def Render()
     add(lines, printf('%s+%-4d -%-4d %s  %s%s', marker, additions, deletions, status, path, thread_info))
   endfor
 
+  # deletebufline() below drops the cursor to line 1, so note where it is.
+  var saved_line = line('.')
+
   setlocal modifiable
   deletebufline(state.GetFilesBufnr(), 1, '$')
   setbufline(state.GetFilesBufnr(), 1, lines)
   setlocal nomodifiable
 
-  # Position cursor on the open file, or the first file line.
-  cursor(CurrentFileLine(), 1)
+  # Position cursor on the open file, or hold the line it is already on.
+  cursor(CurrentFileLine(saved_line), 1)
 enddef
 
-# Line number of the currently open file in the list, or the first file line.
-def CurrentFileLine(): number
-  var current_path = state.GetDiffPath()
-  if empty(current_path)
-    return 4
-  endif
+# Line number of the currently open file in the list, or `fallback` held
+# within the range of file lines.
+def CurrentFileLine(fallback: number): number
   var files = state.GetChangedFiles()
-  for i in range(len(files))
-    if get(files[i], 'path', '') ==# current_path
-      return i + 4
-    endif
-  endfor
-  return 4
+  var current_path = state.GetDiffPath()
+  if !empty(current_path)
+    for i in range(len(files))
+      if get(files[i], 'path', '') ==# current_path
+        return i + 4
+      endif
+    endfor
+  endif
+  return min([max([4, fallback]), len(files) + 3])
 enddef
 
 export def Rerender()
