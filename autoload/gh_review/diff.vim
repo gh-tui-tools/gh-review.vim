@@ -824,6 +824,9 @@ export def CloseDiff()
   state.SetRightBufnr(-1)
   state.SetDiffPath('')
 
+  # Drop the current-file marker from the files list (if open).
+  files.Rerender()
+
   # Return focus to the files list
   var files_bufnr = state.GetFilesBufnr()
   var files_winid = files_bufnr != -1 ? bufwinid(files_bufnr) : -1
