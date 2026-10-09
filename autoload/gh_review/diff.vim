@@ -261,11 +261,11 @@ def ShowDiff(path: string, left_content: list<string>, right_content: list<strin
   if pr_num > 0
     var left_winid = bufwinid(left_bufnr)
     if left_winid != -1
-      setwinvar(left_winid, '&statusline', printf(' PR\ #%d\ ·\ %s\ ·\ base\ (%s)', pr_num, escape(path, ' \'), base_short))
+      setwinvar(left_winid, '&statusline', printf(' PR #%d · %s · base (%s)', pr_num, escape(path, ' \'), base_short))
     endif
     var right_winid = bufwinid(right_bufnr)
     if right_winid != -1
-      setwinvar(right_winid, '&statusline', printf(' PR\ #%d\ ·\ %s\ ·\ head\ (%s)', pr_num, escape(path, ' \'), head_short))
+      setwinvar(right_winid, '&statusline', printf(' PR #%d · %s · head (%s)', pr_num, escape(path, ' \'), head_short))
     endif
   endif
 
