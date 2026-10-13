@@ -46,19 +46,37 @@ g:RunTest('SetPR detects pending review', () => {
   state.Reset()
   state.SetPR(g:MockPRData())
 
-  assert_equal(true, state.IsReviewActive())
-  assert_equal('pending_rev_1', state.GetPendingReviewId())
+  assert_equal(true, state.LastKnownReviewActive())
 })
 
-g:RunTest('IsReviewActive false when no pending review', () => {
+g:RunTest("PendingReviewIdFrom picks the viewer's pending review", () => {
+  var pr = g:MockPRData().data.repository.pullRequest
+  assert_equal('pending_rev_1', state.PendingReviewIdFrom(pr))
+})
+
+g:RunTest('PendingReviewIdFrom ignores pending reviews by other users', () => {
+  var pr = g:MockPRData().data.repository.pullRequest
+  pr.reviews.nodes = [{id: 'someone_else', state: 'PENDING', viewerDidAuthor: false}]
+  assert_equal('', state.PendingReviewIdFrom(pr))
+  state.Reset()
+  var data = g:MockPRData()
+  data.data.repository.pullRequest.reviews.nodes = pr.reviews.nodes
+  state.SetPR(data)
+  assert_equal(false, state.LastKnownReviewActive())
+})
+
+g:RunTest('PendingReviewIdFrom handles missing reviews', () => {
+  assert_equal('', state.PendingReviewIdFrom({}))
+})
+
+g:RunTest('LastKnownReviewActive false when no pending review', () => {
   state.Reset()
   # Build data with no pending reviews
   var data = g:MockPRData()
   data.data.repository.pullRequest.reviews.nodes = []
   state.SetPR(data)
 
-  assert_equal(false, state.IsReviewActive())
-  assert_equal('', state.GetPendingReviewId())
+  assert_equal(false, state.LastKnownReviewActive())
 })
 
 g:RunTest('SetThreads and GetThreads', () => {
@@ -157,8 +175,7 @@ g:RunTest('Reset clears all state', () => {
   assert_equal('', state.GetName())
   assert_equal([], state.GetChangedFiles())
   assert_equal({}, state.GetThreads())
-  assert_equal('', state.GetPendingReviewId())
-  assert_equal(false, state.IsReviewActive())
+  assert_equal(false, state.LastKnownReviewActive())
   assert_equal(-1, state.GetFilesBufnr())
   assert_equal(-1, state.GetLeftBufnr())
   assert_equal(-1, state.GetRightBufnr())
@@ -191,9 +208,8 @@ g:RunTest('Buffer/window setters and getters', () => {
   state.SetMergeBaseOid('ccc333')
   assert_equal('ccc333', state.GetMergeBaseOid())
 
-  state.SetPendingReviewId('rev_xyz')
-  assert_equal('rev_xyz', state.GetPendingReviewId())
-  assert_equal(true, state.IsReviewActive())
+  state.SetLastKnownReviewActive(true)
+  assert_equal(true, state.LastKnownReviewActive())
 })
 
 g:RunTest('SetPR populates head repo for fork PR', () => {

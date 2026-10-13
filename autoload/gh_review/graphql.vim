@@ -42,6 +42,7 @@ var query_pr_details_lines =<< trim GRAPHQL
             comments(first: 50) {
               nodes {
                 id
+                databaseId
                 body
                 author {
                   login
@@ -65,6 +66,7 @@ var query_pr_details_lines =<< trim GRAPHQL
           nodes {
             id
             state
+            viewerDidAuthor
           }
         }
       }
@@ -73,7 +75,7 @@ var query_pr_details_lines =<< trim GRAPHQL
 GRAPHQL
 export const QUERY_PR_DETAILS = join(query_pr_details_lines, "\n")
 
-# Refresh review threads only.
+# Refresh review threads (and the pending-review hint).
 var query_review_threads_lines =<< trim GRAPHQL
   query($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) {
@@ -92,6 +94,7 @@ var query_review_threads_lines =<< trim GRAPHQL
             comments(first: 50) {
               nodes {
                 id
+                databaseId
                 body
                 author {
                   login
@@ -109,6 +112,13 @@ var query_review_threads_lines =<< trim GRAPHQL
                 }
               }
             }
+          }
+        }
+        reviews(first: 10, states: PENDING) {
+          nodes {
+            id
+            state
+            viewerDidAuthor
           }
         }
       }
@@ -179,11 +189,16 @@ var mutation_add_review_thread_lines =<< trim GRAPHQL
         comments(first: 50) {
           nodes {
             id
+            databaseId
             body
             author {
               login
             }
             createdAt
+            pullRequestReview {
+              id
+              state
+            }
           }
         }
       }
@@ -191,6 +206,26 @@ var mutation_add_review_thread_lines =<< trim GRAPHQL
   }
 GRAPHQL
 export const MUTATION_ADD_REVIEW_THREAD = join(mutation_add_review_thread_lines, "\n")
+
+# Look up the viewer's pending review for a PR (see review.Resolve()).
+# There is at most one per user per PR; filter on viewerDidAuthor rather
+# than relying on GitHub hiding other users' pending reviews.
+var query_pending_review_lines =<< trim GRAPHQL
+  query($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      pullRequest(number: $number) {
+        reviews(first: 10, states: PENDING) {
+          nodes {
+            id
+            state
+            viewerDidAuthor
+          }
+        }
+      }
+    }
+  }
+GRAPHQL
+export const QUERY_PENDING_REVIEW = join(query_pending_review_lines, "\n")
 
 # Reply to an existing review thread.
 var mutation_add_review_comment_lines =<< trim GRAPHQL
@@ -202,6 +237,7 @@ var mutation_add_review_comment_lines =<< trim GRAPHQL
     }) {
       comment {
         id
+        databaseId
         body
         author {
           login

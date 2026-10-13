@@ -26,8 +26,10 @@ var changed_files: list<dict<any>> = []
 # Review threads indexed by id
 var threads: dict<dict<any>> = {}
 
-# Pending review id (empty string if no active pending review)
-var pending_review_id: string = ''
+# Last known pending-review state, for display only (statusline, thread
+# buffer labels).  Deliberately a bool, not an ID: anything that acts on
+# a review must ask GitHub via review.Resolve() instead of trusting this.
+var last_known_review_active: bool = false
 
 # Buffer and window IDs
 var files_bufnr: number = -1
@@ -106,16 +108,24 @@ export def GetChangedFiles(): list<dict<any>>
   return changed_files
 enddef
 
-export def GetPendingReviewId(): string
-  return pending_review_id
+# Display-only hint; see last_known_review_active above.
+export def LastKnownReviewActive(): bool
+  return last_known_review_active
 enddef
 
-export def SetPendingReviewId(id: string)
-  pending_review_id = id
+export def SetLastKnownReviewActive(active: bool)
+  last_known_review_active = active
 enddef
 
-export def IsReviewActive(): bool
-  return !empty(pending_review_id)
+# Return the viewer's pending review ID from a pullRequest node's
+# `reviews` connection, or '' if there is none.
+export def PendingReviewIdFrom(pr: dict<any>): string
+  for r in get(get(pr, 'reviews', {}), 'nodes', [])
+    if get(r, 'state', '') ==# 'PENDING' && get(r, 'viewerDidAuthor', false)
+      return r.id
+    endif
+  endfor
+  return ''
 enddef
 
 # Buffer/window accessors
@@ -196,15 +206,7 @@ export def SetPR(data: dict<any>)
 
   changed_files = pr.files.nodes
 
-  # Pick up an existing pending review if one exists
-  if has_key(pr, 'reviews') && !empty(pr.reviews.nodes)
-    for review in pr.reviews.nodes
-      if review.state ==# 'PENDING'
-        pending_review_id = review.id
-        break
-      endif
-    endfor
-  endif
+  last_known_review_active = !empty(PendingReviewIdFrom(pr))
 enddef
 
 export def SetThreads(thread_nodes: list<any>)
@@ -316,7 +318,7 @@ export def Reset()
   repo_remote = ''
   changed_files = []
   threads = {}
-  pending_review_id = ''
+  last_known_review_active = false
   files_bufnr = -1
   left_bufnr = -1
   right_bufnr = -1
