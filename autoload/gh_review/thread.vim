@@ -3,12 +3,35 @@ vim9script
 # Thread/comment buffer for viewing and replying to review threads.
 
 import autoload 'gh_review/state.vim'
+import autoload 'gh_review/review.vim'
 import autoload 'gh_review/api.vim'
 import autoload 'gh_review/graphql.vim'
 import autoload 'gh_review/diff.vim'
 import autoload 'gh_review.vim' as orchestrator
 
-const REPLY_SEPARATOR = "── Reply below (Ctrl-S to submit, Ctrl-R to resolve, Ctrl-Q to cancel) ──"
+# Action labels for the submit keys, derived from the pending-review state
+# frozen when the thread buffer was opened.  Returns
+# [default action (Ctrl-S / :w), alternative action (Ctrl-A)].
+#
+# There is no alternative in review mode: GitHub rejects standalone review
+# comments and replies while the user has a pending review ("user_id can
+# only have one pending review per pull request"), so Ctrl-A is not mapped.
+def ModeLabels(pending_at_open: bool): list<string>
+  if pending_at_open
+    return ['add to pending review', '']
+  endif
+  return ['post comment now', 'start pending review']
+enddef
+
+def BuildSeparator(pending_at_open: bool): string
+  var [default_label, alt_label] = ModeLabels(pending_at_open)
+  var parts = ['Ctrl-S: ' .. default_label]
+  if !empty(alt_label)
+    add(parts, 'Ctrl-A: ' .. alt_label)
+  endif
+  add(parts, 'Ctrl-Q: cancel')
+  return '── ' .. join(parts, ' · ') .. ' ──'
+enddef
 
 # Open an existing thread by id.
 export def Open(thread_id: string)
@@ -49,6 +72,14 @@ def ShowThread(t: dict<any>)
   var comments = get(get(t, 'comments', {}), 'nodes', [])
   var status_label = is_resolved ? 'Resolved' : 'Active'
   var is_new = empty(thread_id)
+
+  # Freeze the submit mode for the whole lifetime of this buffer: the
+  # separator labels and the meaning of Ctrl-S / Ctrl-A never change while
+  # composing.  This uses the last known (display-only) review state so
+  # opening stays instant; the actual review is resolved at submit time,
+  # so a review started/submitted/discarded meanwhile only changes the
+  # target, never which action runs.
+  var pending_at_open = state.LastKnownReviewActive()
 
   # Build buffer content
   var lines: list<string> = []
@@ -96,8 +127,8 @@ def ShowThread(t: dict<any>)
     add(lines, '')
   endfor
 
-  # Reply separator
-  add(lines, REPLY_SEPARATOR)
+  # Reply separator (labels describe the frozen key meanings)
+  add(lines, BuildSeparator(pending_at_open))
   add(lines, '')
 
   var reply_start = len(lines)
@@ -138,10 +169,17 @@ def ShowThread(t: dict<any>)
   b:gh_review_reply_start = reply_start
   b:gh_review_is_new = is_new
   b:gh_review_is_resolved = is_resolved
+  b:gh_review_pending_at_open = pending_at_open
 
-  # Store the first comment id (needed for REST reply)
+  # Store the first comment's GraphQL node id (used as inReplyTo for
+  # pending replies) and its numeric database id (needed for the REST
+  # standalone-reply endpoint).
   if !empty(comments)
     b:gh_review_first_comment_id = comments[0].id
+    var database_id = get(comments[0], 'databaseId', v:null)
+    if database_id != v:null
+      b:gh_review_first_comment_database_id = database_id
+    endif
   endif
 
   # Make the header area read-only via autocmd
@@ -154,6 +192,10 @@ def ShowThread(t: dict<any>)
   # Keymaps
   nnoremap <nowait> <buffer> <C-s> <ScriptCmd>SubmitReply()<CR>
   inoremap <nowait> <buffer> <C-s> <Esc><ScriptCmd>SubmitReply()<CR>
+  if !pending_at_open
+    nnoremap <nowait> <buffer> <C-a> <ScriptCmd>SubmitAlt()<CR>
+    inoremap <nowait> <buffer> <C-a> <Esc><ScriptCmd>SubmitAlt()<CR>
+  endif
   nnoremap <nowait> <buffer> <C-r> <ScriptCmd>ToggleResolve()<CR>
   nnoremap <nowait> <buffer> q <ScriptCmd>CloseThreadBuffer()<CR>
   nnoremap <nowait> <buffer> <C-q> <ScriptCmd>CloseThreadBuffer()<CR>
@@ -235,25 +277,44 @@ def GetReplyText(): string
   return join(lines, "\n")
 enddef
 
+# Ctrl-S / :w — the contextual default action.
 def SubmitReply()
+  DispatchSubmit(get(b:, 'gh_review_pending_at_open', false))
+enddef
+
+# Ctrl-A — the alternative action ("start pending review").  Only mapped
+# when the buffer was opened without a pending review.
+def SubmitAlt()
+  DispatchSubmit(!get(b:, 'gh_review_pending_at_open', false))
+enddef
+
+# Route to one of the two stable submit verbs.  `as_pending` is derived
+# from the key pressed and the review state frozen at buffer open — never
+# from the current, possibly changed, review state.
+def DispatchSubmit(as_pending: bool)
   var body = GetReplyText()
   if empty(body)
     echo 'No reply text to submit'
     return
   endif
 
-  var thread_id = get(b:, 'gh_review_thread_id', '')
   var is_new = get(b:, 'gh_review_is_new', false)
-
   if is_new
-    SubmitNewThread(body)
-  elseif state.IsReviewActive()
-    SubmitReviewReply(body)
+    if as_pending
+      SubmitNewThread(body)
+    else
+      SubmitStandaloneThread(body)
+    endif
   else
-    SubmitStandaloneReply(body)
+    if as_pending
+      SubmitPendingReply(body)
+    else
+      SubmitStandaloneReply(body)
+    endif
   endif
 enddef
 
+# New comment thread, held in a pending review (GraphQL).
 def SubmitNewThread(body: string)
   var path = get(b:, 'gh_review_path', '')
   var line_num = get(b:, 'gh_review_line', 0)
@@ -267,46 +328,76 @@ def SubmitNewThread(body: string)
     line: line_num,
     side: side,
   }
-
   if start_line != v:null
     vars.startLine = start_line
     vars.startSide = side
   endif
 
-  if state.IsReviewActive()
-    vars.pullRequestReviewId = state.GetPendingReviewId()
-  endif
-
-  echo 'Submitting comment...'
-  api.GraphQL(graphql.MUTATION_ADD_REVIEW_THREAD, vars, (result) => {
-    var new_thread = get(get(get(result, 'data', {}), 'addPullRequestReviewThread', {}), 'thread', {})
-    if !empty(new_thread)
-      state.SetThread(new_thread.id, new_thread)
-      diff.RefreshSigns()
-      echo 'Comment submitted'
-      CloseThreadBuffer()
-    else
-      echoerr '[gh-review] Failed to create thread'
+  review.Resolve((review_id) => {
+    # If there is no pending review, omit the review ID and GitHub
+    # implicitly starts one to hold the new thread.
+    if !empty(review_id)
+      vars.pullRequestReviewId = review_id
     endif
+
+    echo 'Submitting comment...'
+    api.GraphQL(graphql.MUTATION_ADD_REVIEW_THREAD, vars, (result) => {
+      var new_thread = get(get(get(result, 'data', {}), 'addPullRequestReviewThread', {}), 'thread', {})
+      if !empty(new_thread)
+        state.SetThread(new_thread.id, new_thread)
+        state.SetLastKnownReviewActive(true)
+        diff.RefreshSigns()
+        echo 'Comment submitted (pending review)'
+        CloseThreadBuffer()
+      else
+        echoerr '[gh-review] Failed to create thread'
+      endif
+    })
   })
 enddef
 
-def SubmitReviewReply(body: string)
+# Reply to an existing thread, held in a pending review (GraphQL).
+def SubmitPendingReply(body: string)
   var first_comment_id = get(b:, 'gh_review_first_comment_id', '')
   if empty(first_comment_id)
     echoerr '[gh-review] Cannot reply: no comment ID found'
     return
   endif
 
+  review.Resolve((review_id) => {
+    if !empty(review_id)
+      AddPendingReply(review_id, first_comment_id, body)
+      return
+    endif
+    # No pending review anywhere: start one and attach the reply to it.
+    echo 'Starting pending review...'
+    var start_vars: dict<any> = {pullRequestId: state.GetPRId()}
+    api.GraphQL(graphql.MUTATION_START_REVIEW, start_vars, (result) => {
+      var started = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
+      if empty(started)
+        echoerr '[gh-review] Failed to start pending review'
+        return
+      endif
+      state.SetLastKnownReviewActive(true)
+      AddPendingReply(started.id, first_comment_id, body)
+    })
+  })
+enddef
+
+def AddPendingReply(review_id: string, in_reply_to: string, body: string)
   echo 'Submitting reply...'
+  # Note: a script-level def rather than a `var F = () => {...}` lambda —
+  # inside such a lambda a line holding only `}` ends the lambda body, so
+  # multi-line dict literals there fail to compile.
   var reply_vars: dict<any> = {
-    pullRequestReviewId: state.GetPendingReviewId(),
-    threadId: first_comment_id,
+    pullRequestReviewId: review_id,
+    threadId: in_reply_to,
     body: body,
   }
   api.GraphQL(graphql.MUTATION_ADD_REVIEW_COMMENT, reply_vars, (result) => {
     var comment = get(get(get(result, 'data', {}), 'addPullRequestReviewComment', {}), 'comment', {})
     if !empty(comment)
+      state.SetLastKnownReviewActive(true)
       echo 'Reply submitted (pending review)'
       # Refresh the thread to show the new comment
       orchestrator.RefreshThreads()
@@ -317,16 +408,14 @@ def SubmitReviewReply(body: string)
   })
 enddef
 
+# Reply to an existing thread, posted standalone immediately (REST).
 def SubmitStandaloneReply(body: string)
-  var first_comment_id = get(b:, 'gh_review_first_comment_id', '')
-  if empty(first_comment_id)
-    echoerr '[gh-review] Cannot reply: no comment ID found'
+  var database_id = get(b:, 'gh_review_first_comment_database_id', 0)
+  if database_id == 0
+    echoerr '[gh-review] Cannot reply: no numeric comment ID found'
     return
   endif
 
-  # Extract the numeric comment ID from the GraphQL node ID
-  # Node IDs look like "IC_kwDOBN..." -- we need the REST API numeric ID
-  # Use the REST API endpoint that accepts GraphQL node IDs
   var owner = state.GetOwner()
   var name = state.GetName()
   var pr_number = state.GetPRNumber()
@@ -334,13 +423,11 @@ def SubmitStandaloneReply(body: string)
   echo 'Submitting reply...'
   api.RunAsync(
     ['api', '-X', 'POST',
-     printf('/repos/%s/%s/pulls/%d/comments/%s/replies', owner, name, pr_number, first_comment_id),
+     printf('/repos/%s/%s/pulls/%d/comments/%d/replies', owner, name, pr_number, database_id),
      '-f', 'body=' .. body],
     (stdout, stderr) => {
-      if !empty(stderr) && stdout !~# '"id"'
-        # The REST API might not accept node IDs directly for the path param.
-        # Fall back: use the graphql-compatible endpoint
-        SubmitReplyViaGraphQL(body, first_comment_id)
+      if !empty(stderr)
+        ReportStandaloneError(stdout, stderr)
         return
       endif
       echo 'Reply submitted'
@@ -349,28 +436,69 @@ def SubmitStandaloneReply(body: string)
     })
 enddef
 
-def SubmitReplyViaGraphQL(body: string, in_reply_to: string)
-  # Use addPullRequestReviewComment without a review ID by creating
-  # a single-comment review
-  var start_vars: dict<any> = {pullRequestId: state.GetPRId()}
-  api.GraphQL(graphql.MUTATION_START_REVIEW, start_vars, (result) => {
-    var review = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
-    if empty(review)
-      echoerr '[gh-review] Failed to create review for reply'
+# Report a failed standalone (REST) post.  The thread buffer stays open so
+# the text is not lost.
+#
+# The common failure is a pending review that appeared after this buffer
+# was opened (web UI, another session, :GHReviewStart): GitHub then rejects
+# standalone comments.  Point the user at Ctrl-A, which resolves the review
+# at submit time and so adds the comment to the existing review.
+def ReportStandaloneError(stdout: string, stderr: string)
+  var detail = trim(stderr)
+  try
+    var errors = get(json_decode(stdout), 'errors', [])
+    var messages = mapnew(errors, (_, e) => get(e, 'message', ''))
+    filter(messages, (_, m) => !empty(m))
+    if !empty(messages)
+      detail = join(messages, '; ')
+    endif
+  catch
+    # Not JSON: fall back to gh's stderr line.
+  endtry
+
+  echohl ErrorMsg
+  if detail =~# 'one pending review'
+    state.SetLastKnownReviewActive(true)
+    echomsg '[gh-review] Not posted: you have a pending review, and GitHub only allows'
+      .. ' adding comments to it. Press Ctrl-A ("start pending review") to add this'
+      .. ' comment to your existing review instead.'
+  else
+    echomsg '[gh-review] Not posted: ' .. detail
+  endif
+  echohl None
+enddef
+
+# New comment thread, posted standalone immediately (REST).
+def SubmitStandaloneThread(body: string)
+  var path = get(b:, 'gh_review_path', '')
+  var line_num = get(b:, 'gh_review_line', 0)
+  var start_line = get(b:, 'gh_review_start_line', v:null)
+  var side = get(b:, 'gh_review_side', 'RIGHT')
+  var owner = state.GetOwner()
+  var name = state.GetName()
+  var pr_number = state.GetPRNumber()
+  var head_sha = state.GetHeadOid()
+
+  echo 'Submitting comment...'
+  var cmd = ['api', '-X', 'POST',
+    printf('/repos/%s/%s/pulls/%d/comments', owner, name, pr_number),
+    '-f', 'body=' .. body,
+    '-f', 'path=' .. path,
+    '-F', 'line=' .. line_num,
+    '-f', 'side=' .. side,
+    '-f', 'commit_id=' .. head_sha,
+  ]
+  if start_line != v:null
+    cmd += ['-F', 'start_line=' .. start_line, '-f', 'start_side=' .. side]
+  endif
+  api.RunAsync(cmd, (post_stdout, post_stderr) => {
+    if !empty(post_stderr)
+      ReportStandaloneError(post_stdout, post_stderr)
       return
     endif
-    var review_id = review.id
-
-    var inner_vars: dict<any> = {pullRequestReviewId: review_id, threadId: in_reply_to, body: body}
-    api.GraphQL(graphql.MUTATION_ADD_REVIEW_COMMENT, inner_vars, (inner_result) => {
-      # Submit the review immediately as COMMENT
-      var submit_vars: dict<any> = {reviewId: review_id, event: 'COMMENT'}
-      api.GraphQL(graphql.MUTATION_SUBMIT_REVIEW, submit_vars, (_) => {
-        echo 'Reply submitted'
-        orchestrator.RefreshThreads()
-        CloseThreadBuffer()
-      })
-    })
+    echo 'Comment submitted'
+    orchestrator.RefreshThreads()
+    CloseThreadBuffer()
   })
 enddef
 
@@ -404,10 +532,17 @@ def ToggleResolve()
 enddef
 
 def ShowThreadHelp()
+  var pending_at_open = get(b:, 'gh_review_pending_at_open', false)
+  var [default_label, alt_label] = ModeLabels(pending_at_open)
   var help = [
     ' Thread keymaps',
     ' ' .. repeat("─", 40),
-    '  Ctrl-S    Submit reply',
+    printf('  Ctrl-S    %s (also :w)', default_label),
+  ]
+  if !empty(alt_label)
+    add(help, printf('  Ctrl-A    %s', alt_label))
+  endif
+  help += [
     '  Ctrl-R    Toggle resolved',
     '  q         Close thread',
     '  Ctrl-Q    Close thread (insert mode)',

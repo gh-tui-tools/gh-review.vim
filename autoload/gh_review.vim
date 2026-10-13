@@ -5,6 +5,7 @@ vim9script
 import autoload 'gh_review/api.vim'
 import autoload 'gh_review/graphql.vim'
 import autoload 'gh_review/state.vim'
+import autoload 'gh_review/review.vim'
 import autoload 'gh_review/files.vim'
 import autoload 'gh_review/diff.vim'
 import autoload 'gh_review/thread.vim'
@@ -244,33 +245,35 @@ export def ToggleFiles()
   files.Toggle()
 enddef
 
-# Start a pending review.
+# Start a pending review (or adopt the one that already exists).
 export def StartReview()
-  if state.IsReviewActive()
-    echo 'A pending review is already active'
-    return
-  endif
-
   if empty(state.GetPRId())
     echoerr '[gh-review] No PR loaded. Use :GHReview {number|url} first.'
     return
   endif
 
-  echo 'Starting review...'
-  var start_vars: dict<any> = {pullRequestId: state.GetPRId()}
-  api.GraphQL(graphql.MUTATION_START_REVIEW, start_vars, (result) => {
-    var review = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
-    if !empty(review)
-      state.SetPendingReviewId(review.id)
-      echo 'Review started. Comments will be held as pending until you submit.'
-    else
-      echoerr '[gh-review] Failed to start review'
+  review.Resolve((review_id) => {
+    if !empty(review_id)
+      echo 'A pending review is already active'
+      return
     endif
+
+    echo 'Starting review...'
+    var start_vars: dict<any> = {pullRequestId: state.GetPRId()}
+    api.GraphQL(graphql.MUTATION_START_REVIEW, start_vars, (result) => {
+      var started = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
+      if !empty(started)
+        state.SetLastKnownReviewActive(true)
+        echo 'Review started. Comments will be held as pending until you submit.'
+      else
+        echoerr '[gh-review] Failed to start review'
+      endif
+    })
   })
 enddef
 
-# Submit a review.  If a pending review is active, submit it; otherwise
-# create and submit a review in one step.
+# Submit a review.  Prompts for the event and an optional body, then
+# hands off to SubmitReviewAs().
 export def SubmitReview()
   if empty(state.GetPRId())
     echoerr '[gh-review] No PR loaded. Use :GHReview {number|url} first.'
@@ -289,88 +292,89 @@ export def SubmitReview()
 
       var events = ['COMMENT', 'APPROVE', 'REQUEST_CHANGES']
       var event = events[choice - 1]
-
-      var DoSubmit = (body: string) => {
-        echo 'Submitting review...'
-
-        if state.IsReviewActive()
-          var vars: dict<any> = {
-            reviewId: state.GetPendingReviewId(),
-            event: event}
-          if !empty(body)
-            vars.body = body
-          endif
-
-          api.GraphQL(graphql.MUTATION_SUBMIT_REVIEW, vars, (result) => {
-            var review = get(get(get(result, 'data', {}), 'submitPullRequestReview', {}), 'pullRequestReview', {})
-            if !empty(review)
-              state.SetPendingReviewId('')
-              echo 'Review submitted as ' .. event
-              RefreshThreads()
-            else
-              echoerr '[gh-review] Failed to submit review'
-            endif
-          })
-        else
-          var vars: dict<any> = {
-            pullRequestId: state.GetPRId(),
-            event: event}
-          if !empty(body)
-            vars.body = body
-          endif
-
-          api.GraphQL(graphql.MUTATION_CREATE_AND_SUBMIT_REVIEW, vars, (result) => {
-            var review = get(get(get(result, 'data', {}), 'addPullRequestReview', {}), 'pullRequestReview', {})
-            if !empty(review)
-              echo 'Review submitted as ' .. event
-              RefreshThreads()
-            else
-              echoerr '[gh-review] Failed to submit review'
-            endif
-          })
-        endif
-      }
-
+      var body = ''
       if choice == 1 || choice == 3
         inputsave()
-        var body = input('Review body (optional): ')
+        body = input('Review body (optional): ')
         inputrestore()
-        DoSubmit(body)
-      else
-        DoSubmit('')
       endif
+      SubmitReviewAs(event, body)
     },
+  })
+enddef
+
+# Submit the viewer's pending review if one exists at this moment;
+# otherwise create and submit a review in one step.
+export def SubmitReviewAs(event: string, body: string)
+  echo 'Submitting review...'
+
+  review.Resolve((review_id) => {
+    var vars: dict<any> = {event: event}
+    if !empty(body)
+      vars.body = body
+    endif
+
+    var mutation: string
+    var payload_key: string
+    if !empty(review_id)
+      vars.reviewId = review_id
+      mutation = graphql.MUTATION_SUBMIT_REVIEW
+      payload_key = 'submitPullRequestReview'
+    else
+      vars.pullRequestId = state.GetPRId()
+      mutation = graphql.MUTATION_CREATE_AND_SUBMIT_REVIEW
+      payload_key = 'addPullRequestReview'
+    endif
+
+    api.GraphQL(mutation, vars, (result) => {
+      var submitted = get(get(get(result, 'data', {}), payload_key, {}), 'pullRequestReview', {})
+      if !empty(submitted)
+        state.SetLastKnownReviewActive(false)
+        echo 'Review submitted as ' .. event
+        RefreshThreads()
+      else
+        echoerr '[gh-review] Failed to submit review'
+      endif
+    })
   })
 enddef
 
 # Discard the pending review (delete it and all its pending comments).
 export def DiscardReview()
-  if !state.IsReviewActive()
-    echoerr '[gh-review] No pending review to discard.'
+  if empty(state.GetPRId())
+    echoerr '[gh-review] No PR loaded. Use :GHReview {number|url} first.'
     return
   endif
 
-  var choice = confirm('Discard pending review and all its comments?', "&Yes\n&No", 2)
-  if choice != 1
-    echo 'Cancelled'
-    return
-  endif
-
-  echo 'Discarding review...'
-  var vars: dict<any> = {pullRequestReviewId: state.GetPendingReviewId()}
-  api.GraphQL(graphql.MUTATION_DELETE_REVIEW, vars, (result) => {
-    var review = get(get(get(result, 'data', {}), 'deletePullRequestReview', {}), 'pullRequestReview', {})
-    if !empty(review)
-      state.SetPendingReviewId('')
-      RefreshThreads()
-      echo 'Pending review discarded'
-    else
-      echoerr '[gh-review] Failed to discard review'
+  review.Resolve((review_id) => {
+    if empty(review_id)
+      echoerr '[gh-review] No pending review to discard.'
+      return
     endif
+
+    var choice = confirm('Discard pending review and all its comments?', "&Yes\n&No", 2)
+    if choice != 1
+      echo 'Cancelled'
+      return
+    endif
+
+    echo 'Discarding review...'
+    var vars: dict<any> = {pullRequestReviewId: review_id}
+    api.GraphQL(graphql.MUTATION_DELETE_REVIEW, vars, (result) => {
+      var deleted = get(get(get(result, 'data', {}), 'deletePullRequestReview', {}), 'pullRequestReview', {})
+      if !empty(deleted)
+        state.SetLastKnownReviewActive(false)
+        RefreshThreads()
+        echo 'Pending review discarded'
+      else
+        echoerr '[gh-review] Failed to discard review'
+      endif
+    })
   })
 enddef
 
-# Refresh threads from GitHub and update signs/files list.
+# Refresh threads (and the pending-review display hint) from GitHub and
+# update signs/files list.
 export def RefreshThreads()
   if empty(state.GetPRId())
     return
@@ -385,20 +389,23 @@ export def RefreshThreads()
     var pr = get(get(get(result, 'data', {}), 'repository', {}), 'pullRequest', {})
     var thread_nodes = get(get(pr, 'reviewThreads', {}), 'nodes', [])
     state.SetThreads(thread_nodes)
+    state.SetLastKnownReviewActive(!empty(state.PendingReviewIdFrom(pr)))
     diff.RefreshSigns()
     files.Rerender()
     echo 'Threads refreshed'
   })
 enddef
 
-# Statusline component: returns "" when no review is active, or a summary.
+# Statusline component: returns "" when no PR is loaded, or a summary.
+# "reviewing" reflects the last known pending-review state (display only;
+# the statusline is evaluated on every redraw and must not hit the API).
 export def Statusline(): string
   if empty(state.GetPRId())
     return ''
   endif
   var parts: list<string> = []
   add(parts, printf('PR #%d', state.GetPRNumber()))
-  if state.IsReviewActive()
+  if state.LastKnownReviewActive()
     add(parts, 'reviewing')
   endif
   var thread_count = len(state.GetThreads())
