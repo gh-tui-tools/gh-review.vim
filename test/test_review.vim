@@ -225,8 +225,7 @@ g:RunTest('No review: Ctrl-S posts a new comment standalone via REST', () => {
   OpenNewComment()
   Press("\<C-s>")
 
-  assert_equal(['GET /repos/testowner/testrepo/pulls/42',
-    'POST /repos/testowner/testrepo/pulls/42/comments', 'refresh'], Ops())
+  assert_equal(['POST /repos/testowner/testrepo/pulls/42/comments', 'refresh'], Ops())
   var post = FindCall('POST /repos/testowner/testrepo/pulls/42/comments')
   assert_equal('a new comment', post.vars.body)
   assert_equal('src/new_file.ts', post.vars.path)
@@ -241,7 +240,7 @@ g:RunTest(':w performs the same default action as Ctrl-S', () => {
   OpenNewComment()
   silent write
 
-  assert_equal('POST /repos/testowner/testrepo/pulls/42/comments', get(Ops(), 1, ''))
+  assert_equal('POST /repos/testowner/testrepo/pulls/42/comments', get(Ops(), 0, ''))
   Teardown()
 })
 
@@ -322,8 +321,7 @@ g:RunTest('Review started meanwhile: Ctrl-S fails clearly, Ctrl-A adds to it', (
 
   # Separator promised "post comment now", so that is what is attempted.
   Press("\<C-s>")
-  assert_equal(['GET /repos/testowner/testrepo/pulls/42',
-    'POST /repos/testowner/testrepo/pulls/42/comments'], Ops())
+  assert_equal(['POST /repos/testowner/testrepo/pulls/42/comments'], Ops())
   var msgs = execute('messages')
   assert_match('you have a pending review', msgs)
   assert_match('Press Ctrl-A', msgs)

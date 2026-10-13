@@ -477,51 +477,29 @@ def SubmitStandaloneThread(body: string)
   var owner = state.GetOwner()
   var name = state.GetName()
   var pr_number = state.GetPRNumber()
+  var head_sha = state.GetHeadOid()
 
   echo 'Submitting comment...'
-  # Re-fetch the head SHA right before posting: the endpoint requires a
-  # commit_id and the cached one may be stale, which would bind the
-  # comment to an outdated commit.
-  api.RunAsync(
-    ['api', printf('/repos/%s/%s/pulls/%d', owner, name, pr_number)],
-    (stdout, stderr) => {
-      if !empty(stderr)
-        echoerr '[gh-review] ' .. trim(stderr)
-        return
-      endif
-      var head_sha = ''
-      try
-        head_sha = get(get(json_decode(stdout), 'head', {}), 'sha', '')
-      catch
-        echoerr '[gh-review] Failed to fetch PR head commit'
-        return
-      endtry
-      if empty(head_sha)
-        echoerr '[gh-review] Could not determine PR head commit'
-        return
-      endif
-
-      var cmd = ['api', '-X', 'POST',
-        printf('/repos/%s/%s/pulls/%d/comments', owner, name, pr_number),
-        '-f', 'body=' .. body,
-        '-f', 'path=' .. path,
-        '-F', 'line=' .. line_num,
-        '-f', 'side=' .. side,
-        '-f', 'commit_id=' .. head_sha,
-      ]
-      if start_line != v:null
-        cmd += ['-F', 'start_line=' .. start_line, '-f', 'start_side=' .. side]
-      endif
-      api.RunAsync(cmd, (post_stdout, post_stderr) => {
-        if !empty(post_stderr)
-          ReportStandaloneError(post_stdout, post_stderr)
-          return
-        endif
-        echo 'Comment submitted'
-        orchestrator.RefreshThreads()
-        CloseThreadBuffer()
-      })
-    })
+  var cmd = ['api', '-X', 'POST',
+    printf('/repos/%s/%s/pulls/%d/comments', owner, name, pr_number),
+    '-f', 'body=' .. body,
+    '-f', 'path=' .. path,
+    '-F', 'line=' .. line_num,
+    '-f', 'side=' .. side,
+    '-f', 'commit_id=' .. head_sha,
+  ]
+  if start_line != v:null
+    cmd += ['-F', 'start_line=' .. start_line, '-f', 'start_side=' .. side]
+  endif
+  api.RunAsync(cmd, (post_stdout, post_stderr) => {
+    if !empty(post_stderr)
+      ReportStandaloneError(post_stdout, post_stderr)
+      return
+    endif
+    echo 'Comment submitted'
+    orchestrator.RefreshThreads()
+    CloseThreadBuffer()
+  })
 enddef
 
 def ToggleResolve()
