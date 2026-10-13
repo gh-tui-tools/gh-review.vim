@@ -92,7 +92,8 @@ export def Open(pr_number_str: string = '')
     if should_checkout
       var local_branch = state.GetHeadRef()
       var current_branch = trim(system('git rev-parse --abbrev-ref HEAD 2>/dev/null'))
-      if current_branch ==# local_branch
+      var head_oid = trim(system('git rev-parse HEAD 2>/dev/null'))
+      if current_branch ==# local_branch || head_oid ==# state.GetHeadOid()
         LoadUI()
         return
       endif
