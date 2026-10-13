@@ -81,8 +81,11 @@ g:RunTest('Thread buffer: existing thread renders header and comments', () => {
   assert_match('2025-01-15', all_text)
   assert_match('Looks good', all_text)
 
-  # Reply separator
-  assert_match('Reply below', all_text)
+  # Reply separator: MockPRData has an active pending review, so the
+  # default action is adding to that review and there is no alternative
+  # (GitHub rejects standalone comments while a review is pending).
+  assert_match('Ctrl-S: add to pending review', all_text)
+  assert_notmatch('Ctrl-A', all_text)
 
   thread.CloseThreadBuffer()
   CleanupDiffBuffers()
@@ -131,6 +134,13 @@ g:RunTest('Thread buffer: new comment renders New header', () => {
 
   assert_true(getbufvar(bufnr, 'gh_review_is_new'))
 
+  # No PR loaded and no pending review: default action is posting a
+  # standalone comment, the alternative starts a pending review.
+  assert_false(getbufvar(bufnr, 'gh_review_pending_at_open'))
+  var all_text = join(lines, "\n")
+  assert_match('Ctrl-S: post comment now', all_text)
+  assert_match('Ctrl-A: start pending review', all_text)
+
   thread.CloseThreadBuffer()
   CleanupDiffBuffers()
 })
@@ -152,6 +162,9 @@ g:RunTest('Thread buffer: metadata variables set correctly', () => {
   assert_false(getbufvar(bufnr, 'gh_review_is_new'))
   assert_false(getbufvar(bufnr, 'gh_review_is_resolved'))
   assert_equal('comment_1', getbufvar(bufnr, 'gh_review_first_comment_id'))
+  assert_equal(1001, getbufvar(bufnr, 'gh_review_first_comment_database_id'))
+  # MockPRData carries a PENDING review, so the mode is frozen as pending.
+  assert_true(getbufvar(bufnr, 'gh_review_pending_at_open'))
 
   thread.CloseThreadBuffer()
   CleanupDiffBuffers()
@@ -169,6 +182,7 @@ g:RunTest('Thread buffer: resolved thread metadata', () => {
 
   assert_true(getbufvar(bufnr, 'gh_review_is_resolved'))
   assert_equal('comment_2', getbufvar(bufnr, 'gh_review_first_comment_id'))
+  assert_equal(1002, getbufvar(bufnr, 'gh_review_first_comment_database_id'))
 
   thread.CloseThreadBuffer()
   CleanupDiffBuffers()
@@ -414,7 +428,7 @@ g:RunTest('Thread buffer: reply_start points to line after separator', () => {
 
   # The line just before reply_start should be the separator
   var sep_line = getbufline(bufnr, reply_start - 1, reply_start - 1)[0]
-  assert_match('Reply below', sep_line, 'line before reply_start should be the separator')
+  assert_match('Ctrl-S', sep_line, 'line before reply_start should be the separator')
 
   # The line at reply_start should be blank (ready for input)
   var reply_line = getbufline(bufnr, reply_start, reply_start)[0]

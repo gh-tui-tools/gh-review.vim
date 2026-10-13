@@ -114,23 +114,26 @@ A quick-start sequence for either workflow: >
 :GHReviewFiles          Toggle the changed files list buffer.
 
                                                               *:GHReviewStart*
-:GHReviewStart          Start a pending review.  All subsequent comments will
-                        be held as pending until the review is submitted.
-                        This is optional; |:GHReviewSubmit| works without it.
-                        If a pending review already exists on the PR (from a
-                        previous session or the GitHub web UI), it is detected
-                        automatically and reused.
+:GHReviewStart          Start a pending review.  Comments posted with the
+                        pending action are held until the review is
+                        submitted.  This is optional: CTRL-A in a thread
+                        buffer starts a review with that comment, and
+                        |:GHReviewSubmit| works without one.  If a pending
+                        review already exists on the PR (from a previous
+                        session, the GitHub web UI, or created implicitly by
+                        GitHub), it is detected and reused.
 
                                                              *:GHReviewSubmit*
 :GHReviewSubmit         Submit a review.  Prompts for the review action
                         (Comment, Approve, or Request changes) and an optional
-                        body.  If a pending review is active, it is submitted;
-                        otherwise a review is created and submitted in one
-                        step.
+                        body.  If a pending review exists on GitHub at that
+                        moment, it is submitted; otherwise a review is created
+                        and submitted in one step.
 
                                                             *:GHReviewDiscard*
 :GHReviewDiscard        Discard the pending review.  Prompts for confirmation,
                         then deletes the review and all its pending comments.
+                        Reports an error if no pending review exists.
 
                                                               *:GHReviewClose*
 :GHReviewClose          Close all review buffers and reset plugin state.
@@ -230,22 +233,55 @@ comments, and a reply area: >
     alice (2025-01-15):
       Looks good
 
-    -- Reply below (Ctrl-S to submit, Ctrl-R to resolve, Ctrl-Q to cancel) --
+    -- Ctrl-S: post comment now · Ctrl-A: start pending review · Ctrl-Q: cancel --
+
+<
+or, while a pending review exists: >
+
+    -- Ctrl-S: add to pending review · Ctrl-Q: cancel --
 
 <
 The area above the separator is read-only.  The area below is the reply
 editor.
 
+Every comment can be posted two ways: standalone (visible immediately, not
+attached to any review) or pending (held in a pending review until
+|:GHReviewSubmit|).  When the buffer opens, the plugin freezes which key
+does what based on whether a pending review was last known to exist, and
+the separator line always shows the current meaning.  The frozen key
+meanings never change while the buffer is open.
+
+The pending review itself is never taken from a cache: every action that
+needs it (pending comments and replies, |:GHReviewStart|,
+|:GHReviewSubmit|, |:GHReviewDiscard|) looks it up on GitHub first.  So if
+a review is started, submitted or discarded meanwhile — here, in the web
+UI or in another session — a pending action attaches to whichever review
+is pending at submit time, starting one if there is none.
+
+GitHub does not allow standalone review comments or replies while you have
+a pending review.  So once a review is pending, every comment goes into it
+and CTRL-A is not mapped.  If a review was started elsewhere after the
+buffer opened, "post comment now" fails with an explanation and the buffer
+stays open; CTRL-A ("start pending review") then adds the comment to the
+existing review.  To post standalone again after the review was submitted
+or discarded elsewhere, copy the text, refresh with `R` in the files list
+and reopen the thread.
+
 THREAD MAPPINGS ~
                                                   *gh-review-thread-mappings*
 
-CTRL-S                  Submit the reply text (below the separator line).
+CTRL-S                  Submit with the default action shown in the
+                        separator line.
+CTRL-A                  Submit with the alternative action ("start pending
+                        review").  Only mapped when no pending review
+                        existed when the buffer was opened.
 CTRL-R                  Resolve or unresolve the thread.
 q                       Close the thread buffer.
 CTRL-Q                  Close the thread buffer (works in insert mode too).
 g?                      Show keymap help in a floating popup.
 
-The thread buffer uses |'buftype'| `acwrite`, so |:w| also submits the reply.
+The thread buffer uses |'buftype'| `acwrite`, so |:w| performs the same
+default action as CTRL-S.
 
 @-MENTION COMPLETION ~
                                               *gh-review-thread-completion*
