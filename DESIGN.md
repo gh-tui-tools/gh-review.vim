@@ -59,10 +59,12 @@ plugin/gh_review.vim          Entry point: commands, signs, highlights, fold gua
 autoload/gh_review.vim        Top-level orchestration (Open, Close, review lifecycle)
 autoload/gh_review/
   api.vim                     Async wrapper around the gh CLI
+  job.vim                     Process boundary (job_start), shadowed in tests
   graphql.vim                 GraphQL query/mutation constants
   state.vim                   Centralized state management
   files.vim                   Changed files list buffer
   diff.vim                    Side-by-side diff view with signs
+  review.vim                  Pending-review resolution (Resolve)
   thread.vim                  Thread/comment buffer for viewing and replying
 syntax/
   gh-review-files.vim         Syntax highlighting for the files list
@@ -78,7 +80,7 @@ All plugin state lives in script-local variables in `state.vim`, accessed throug
 - **Changed files**: list of dicts with path, additions, deletions, changeType.
 - **Review threads**: indexed by thread ID in a dict. Threads are the central data structure — they drive sign placement, files list thread counts, and the thread buffer content.
 - **Buffer/window IDs**: files list, left diff, right diff, thread buffer and window.
-- **UI state**: current diff path, local checkout flag, pending review ID.
+- **UI state**: current diff path, local checkout flag, last known pending-review state (display-only bool; see Review lifecycle).
 
 `GetParticipants()` extracts unique, sorted `author.login` values from all thread comments, used by the thread buffer’s omnifunc for `@`-mention completion.
 
@@ -86,9 +88,9 @@ All plugin state lives in script-local variables in `state.vim`, accessed throug
 
 ### Async API layer (`api.vim`)
 
-All external commands run asynchronously via `job_start()`:
+All external commands run asynchronously via `job_start()`, which is confined to `job.vim`'s `Run()` so tests can replace the process boundary (see Testing):
 
-- **`RunCmdAsync(cmd, Callback)`**: runs an arbitrary command. Callback receives `(stdout, stderr, exit_status)`.
+- **`RunCmdAsync(cmd, Callback)`**: runs an arbitrary command via `job.Run()`. Callback receives `(stdout, stderr, exit_status)`.
 - **`RunAsync(cmd, Callback)`**: prepends `gh` to the command. Callback receives `(stdout, stderr)`.
 - **`GraphQL(query, variables, Callback)`**: builds the `gh api graphql` command with `-f`/`-F` flags (string vs. JSON), runs it, parses the response, checks for GraphQL errors, and calls back with the parsed dict.
 
@@ -99,7 +101,8 @@ All callbacks are deferred to the main loop via `timer_start(0, ...)` to avoid r
 Constants for all API operations, using heredoc syntax (joined into strings since heredocs produce `list<string>` in Vim9script):
 
 - `QUERY_PR_DETAILS`: fetches PR metadata, files (first 100), review threads (first 100) with comments (first 50), and pending reviews.
-- `QUERY_REVIEW_THREADS`: lighter query for refreshing threads only.
+- `QUERY_REVIEW_THREADS`: lighter query for refreshing threads (and the pending-review hint).
+- `QUERY_PENDING_REVIEW`: the viewer’s pending review, used by `review.Resolve()`.
 - Mutations for: starting a review, submitting a review, creating and submitting a review in one step, adding a thread, replying to a thread, resolving/unresolving threads, deleting a review.
 
 ### Opening a PR (`gh_review.vim: Open()`)
@@ -263,7 +266,7 @@ Thread on src/main.rs:42  [Active]
 alice (2025-01-15):
   Looks good
 
-── Reply below (Ctrl-S to submit, Ctrl-R to resolve, Ctrl-Q to cancel) ──
+── Ctrl-S: post comment now · Ctrl-A: start pending review · Ctrl-Q: cancel ──
 
 ```
 
@@ -272,7 +275,7 @@ alice (2025-01-15):
 - Opens in a `botright` split, 15 lines high, with `winfixheight`.
 - The header area (everything above the reply separator) is **read-only**, enforced by a `CursorMoved`/`CursorMovedI` autocmd that toggles `nomodifiable` based on cursor position relative to `b:gh_review_reply_start`.
 - The reply area (below the separator) is editable.
-- Buffer type is `acwrite` so `:w` submits the reply.
+- Buffer type is `acwrite` so `:w` performs the default submit action (same as `Ctrl-S`).
 
 #### Code context
 
@@ -280,17 +283,25 @@ The thread buffer shows the code line(s) being commented on, pulled from the lef
 
 #### Submitting replies
 
-Three paths depending on context:
+Every comment can be posted **standalone** (visible immediately) or **pending** (held in the pending review). `Ctrl-S`/`:w` is the default action, `Ctrl-A` the alternative:
 
-1. **New thread**: `addPullRequestReviewThread` mutation. If a pending review is active, the thread is attached to it.
-2. **Reply with active review**: `addPullRequestReviewComment` mutation using the pending review ID.
-3. **Standalone reply** (no pending review): first tries the REST API (`POST .../comments/<id>/replies`). If that fails (e.g., node ID not accepted), falls back to creating a temporary review, adding the comment, and immediately submitting it as `COMMENT`.
+| Last known review state at open | `Ctrl-S` / `:w`        | `Ctrl-A`               |
+|---------------------------------|------------------------|------------------------|
+| No pending review               | post comment now       | start pending review   |
+| Pending review                  | add to pending review  | *(not mapped)*         |
+
+GitHub rejects standalone review comments and replies while the user has a pending review (`422 user_id can only have one pending review per pull request`; `addPullRequestReviewThreadReply` without a review ID silently lands in the pending review).
+
+The mode is frozen in `b:gh_review_pending_at_open` when the buffer opens and the separator line labels the keys accordingly; the meaning never changes while the buffer is open. If a review appears after opening, “post comment now” hits the 422: `ReportStandaloneError()` explains it, points at `Ctrl-A` (“start pending review”, which resolves at submit time and so appends to the existing review), updates the display hint, and leaves the buffer open. Other REST failures show GitHub’s error message.
+
+The REST reply endpoint needs the numeric `databaseId` of the thread’s first comment, which the thread queries fetch alongside the GraphQL node `id`.
 
 #### Keymaps
 
 | Key      | Action                                       |
 |----------|----------------------------------------------|
-| `Ctrl-S` | Submit reply (works in normal and insert mode) |
+| `Ctrl-S` | Default submit action (normal and insert mode) |
+| `Ctrl-A` | Alternative submit action (normal and insert mode) |
 | `Ctrl-R` | Toggle resolved/unresolved                   |
 | `q`      | Close thread buffer                          |
 | `Ctrl-Q` | Close thread buffer (works in insert mode)   |
@@ -319,11 +330,16 @@ Comment reactions from GitHub are displayed after each comment body as emoji wit
 
 ### Review lifecycle
 
-- **`:GHReviewStart`**: creates a pending review via `addPullRequestReview`. All subsequent comments and replies are attached to this review. This is optional — `:GHReviewSubmit` works without it.
-- **`:GHReviewSubmit`**: prompts for action (Comment / Approve / Request changes) and optional body. If a pending review is active, submits it via `submitPullRequestReview`. If no pending review exists, creates and submits a review in one step via `addPullRequestReview` with an `event` parameter.
-- **`:GHReviewDiscard`**: prompts for confirmation, then deletes the pending review and all its pending comments via `deletePullRequestReview`.
+A user can have at most one pending review per PR, and it can be created, submitted or discarded outside the plugin at any time — in the web UI, in another session, or implicitly by GitHub when `addPullRequestReviewThread` is called without a review ID. The plugin therefore never caches the pending review ID:
 
-If a pending review already exists on the PR (from a previous session or the GitHub web UI), it is detected during `SetPR()` and reused.
+- **`review.Resolve(Callback)`** (`review.vim`) queries `QUERY_PENDING_REVIEW` and passes the viewer’s pending review ID (filtered on `viewerDidAuthor`), or `''`, to the callback. Every action that targets or depends on a pending review calls it first and uses that ID for that single invocation only.
+- **`state.LastKnownReviewActive()`** is a display-only *bool* hint for the statusline and the thread buffer’s frozen key labels, which must be answered synchronously. It is refreshed as a side effect of `SetPR()`, `Resolve()`, `RefreshThreads()` and successful review mutations. It is deliberately not an ID, so it cannot be used to drive a mutation.
+
+Lifecycle commands, each starting with `Resolve()`:
+
+- **`:GHReviewStart`**: if a pending review exists, adopts it; otherwise creates one via `addPullRequestReview`. Optional — `Ctrl-A` in a thread buffer or `:GHReviewSubmit` work without it.
+- **`:GHReviewSubmit`**: prompts for action (Comment / Approve / Request changes) and optional body, then `SubmitReviewAs()` resolves: an existing pending review is submitted via `submitPullRequestReview`; otherwise a review is created and submitted in one step via `addPullRequestReview` with an `event` parameter.
+- **`:GHReviewDiscard`**: if no pending review exists, reports so; otherwise prompts for confirmation and deletes it with all its pending comments via `deletePullRequestReview`.
 
 ### Window management
 
@@ -347,6 +363,9 @@ Tests run in headless Vim (`vim --clean --not-a-term -N`) and use a custom `RunT
 | `test_navigation.vim` | Sign placement across sides, refresh, edge cases |
 | `test_graphql.vim`    | GraphQL constant structure validation           |
 | `test_open.vim`       | URL/number parsing                              |
+| `test_review.vim`     | Submit routing per key and mode, pending-review resolution, review lifecycle — against a mocked `gh` that simulates server-side review state (see below) |
+
+`test_review.vim` prepends `test/mock` to `'runtimepath'` before any autoload import, so `import autoload 'gh_review/job.vim'` resolves to `test/mock/autoload/gh_review/job.vim` instead of the real module. The double never spawns a process; it hands each command to a responder set with `SetResponder()` and calls back synchronously. Everything above it — argv building, `GraphQL()` variable encoding, JSON parsing and error handling — is the real code. Production code contains no test hooks.
 
 Headless Vim constraints:
 - `startinsert` crashes in `--not-a-term` mode; tests pass body content directly to `OpenNew()` instead.

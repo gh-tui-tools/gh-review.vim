@@ -2,28 +2,12 @@ vim9script
 
 # Async wrapper around the `gh` CLI.
 
+import autoload 'gh_review/job.vim'
+
 # Run an arbitrary command asynchronously.
 # Callback receives (stdout, stderr, exit_status).
 export def RunCmdAsync(cmd: list<string>, Callback: func(string, string, number))
-  var stdout_lines: list<string> = []
-  var stderr_lines: list<string> = []
-
-  var job = job_start(cmd, {
-    out_mode: 'raw',
-    err_mode: 'raw',
-    out_cb: (ch, msg) => {
-      add(stdout_lines, msg)
-    },
-    err_cb: (ch, msg) => {
-      add(stderr_lines, msg)
-    },
-    exit_cb: (job_handle, exit_status) => {
-      var out = join(stdout_lines, '')
-      var err = join(stderr_lines, '')
-      # Defer callback to the main loop so it runs outside the job handler
-      timer_start(0, (_) => Callback(out, err, exit_status))
-    },
-  })
+  job.Run(cmd, Callback)
 enddef
 
 # Run a gh command asynchronously.  Callback receives (stdout, stderr).

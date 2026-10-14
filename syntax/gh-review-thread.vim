@@ -9,8 +9,8 @@ syntax match ghThreadStatus '\v\[(Active|Resolved|New)\]' contained
 " Separator lines (solid horizontal rules)
 syntax match ghThreadSeparator '\v^─+$'
 
-" Reply separator
-syntax match ghThreadReplySep '\v^── Reply below.*──$'
+" Reply separator (action labels for the submit keys)
+syntax match ghThreadReplySep '\v^── Ctrl-S:.*──$'
 
 " Code context: "  42 + │ code"
 syntax match ghThreadCodeContext '\v^  \d+ [+-] │.*$' contains=ghThreadCodeLineNr,ghThreadCodeDiffMark,ghThreadCodeBar

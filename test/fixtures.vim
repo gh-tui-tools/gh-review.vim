@@ -44,7 +44,7 @@ def g:MockPRData(): dict<any>
                 diffSide: 'RIGHT',
                 path: 'src/new_file.ts',
                 comments: {nodes: [
-                  {id: 'comment_1', body: 'Looks good', author: {login: 'alice'}, createdAt: '2025-01-15T10:30:00Z', pullRequestReview: {id: 'rev_1', state: 'COMMENTED'}},
+                  {id: 'comment_1', databaseId: 1001, body: 'Looks good', author: {login: 'alice'}, createdAt: '2025-01-15T10:30:00Z', pullRequestReview: {id: 'rev_1', state: 'COMMENTED'}},
                 ]},
               },
               {
@@ -58,8 +58,8 @@ def g:MockPRData(): dict<any>
                 diffSide: 'RIGHT',
                 path: 'src/new_file.ts',
                 comments: {nodes: [
-                  {id: 'comment_2', body: 'Fix this', author: {login: 'bob'}, createdAt: '2025-01-15T11:00:00Z', pullRequestReview: {id: 'rev_2', state: 'COMMENTED'}},
-                  {id: 'comment_3', body: 'Done', author: {login: 'alice'}, createdAt: '2025-01-15T12:00:00Z', pullRequestReview: {id: 'rev_2', state: 'COMMENTED'}},
+                  {id: 'comment_2', databaseId: 1002, body: 'Fix this', author: {login: 'bob'}, createdAt: '2025-01-15T11:00:00Z', pullRequestReview: {id: 'rev_2', state: 'COMMENTED'}},
+                  {id: 'comment_3', databaseId: 1003, body: 'Done', author: {login: 'alice'}, createdAt: '2025-01-15T12:00:00Z', pullRequestReview: {id: 'rev_2', state: 'COMMENTED'}},
                 ]},
               },
               {
@@ -73,7 +73,7 @@ def g:MockPRData(): dict<any>
                 diffSide: 'RIGHT',
                 path: 'src/existing.ts',
                 comments: {nodes: [
-                  {id: 'comment_4', body: 'General comment', author: {login: 'bob'}, createdAt: '2025-01-15T13:00:00Z', pullRequestReview: {id: 'rev_3', state: 'COMMENTED'}},
+                  {id: 'comment_4', databaseId: 1004, body: 'General comment', author: {login: 'bob'}, createdAt: '2025-01-15T13:00:00Z', pullRequestReview: {id: 'rev_3', state: 'COMMENTED'}},
                 ]},
               },
               {
@@ -87,14 +87,14 @@ def g:MockPRData(): dict<any>
                 diffSide: 'LEFT',
                 path: 'src/existing.ts',
                 comments: {nodes: [
-                  {id: 'comment_5', body: 'Pending note', author: {login: 'alice'}, createdAt: '2025-01-16T09:00:00Z', pullRequestReview: {id: 'pending_rev_1', state: 'PENDING'}},
+                  {id: 'comment_5', databaseId: 1005, body: 'Pending note', author: {login: 'alice'}, createdAt: '2025-01-16T09:00:00Z', pullRequestReview: {id: 'pending_rev_1', state: 'PENDING'}},
                 ]},
               },
             ]
           },
           reviews: {
             nodes: [
-              {id: 'pending_rev_1', state: 'PENDING'},
+              {id: 'pending_rev_1', state: 'PENDING', viewerDidAuthor: true},
             ]
           },
         }
