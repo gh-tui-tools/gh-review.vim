@@ -266,7 +266,7 @@ Thread on src/main.rs:42  [Active]
 alice (2025-01-15):
   Looks good
 
-── Ctrl-S: post comment now · Ctrl-A: start pending review · Ctrl-Q: cancel ──
+── Ctrl-S: post comment now · Ctrl-G: start pending review · Ctrl-Q: cancel ──
 
 ```
 
@@ -283,16 +283,16 @@ The thread buffer shows the code line(s) being commented on, pulled from the lef
 
 #### Submitting replies
 
-Every comment can be posted **standalone** (visible immediately) or **pending** (held in the pending review). `Ctrl-S`/`:w` is the default action, `Ctrl-A` the alternative:
+Every comment can be posted **standalone** (visible immediately) or **pending** (held in the pending review). `Ctrl-S`/`:w` is the default action, `Ctrl-G` the alternative:
 
-| Last known review state at open | `Ctrl-S` / `:w`        | `Ctrl-A`               |
+| Last known review state at open | `Ctrl-S` / `:w`        | `Ctrl-G`               |
 |---------------------------------|------------------------|------------------------|
 | No pending review               | post comment now       | start pending review   |
 | Pending review                  | add to pending review  | *(not mapped)*         |
 
 GitHub rejects standalone review comments and replies while the user has a pending review (`422 user_id can only have one pending review per pull request`; `addPullRequestReviewThreadReply` without a review ID silently lands in the pending review).
 
-The mode is frozen in `b:gh_review_pending_at_open` when the buffer opens and the separator line labels the keys accordingly; the meaning never changes while the buffer is open. If a review appears after opening, “post comment now” hits the 422: `ReportStandaloneError()` explains it, points at `Ctrl-A` (“start pending review”, which resolves at submit time and so appends to the existing review), updates the display hint, and leaves the buffer open. Other REST failures show GitHub’s error message.
+The mode is frozen in `b:gh_review_pending_at_open` when the buffer opens and the separator line labels the keys accordingly; the meaning never changes while the buffer is open. If a review appears after opening, “post comment now” hits the 422: `ReportStandaloneError()` explains it, points at `Ctrl-G` (“start pending review”, which resolves at submit time and so appends to the existing review), updates the display hint, and leaves the buffer open. Other REST failures show GitHub’s error message.
 
 The REST reply endpoint needs the numeric `databaseId` of the thread’s first comment, which the thread queries fetch alongside the GraphQL node `id`.
 
@@ -301,7 +301,7 @@ The REST reply endpoint needs the numeric `databaseId` of the thread’s first c
 | Key      | Action                                       |
 |----------|----------------------------------------------|
 | `Ctrl-S` | Default submit action (normal and insert mode) |
-| `Ctrl-A` | Alternative submit action (normal and insert mode) |
+| `Ctrl-G` | Alternative submit action (normal and insert mode) |
 | `Ctrl-R` | Toggle resolved/unresolved                   |
 | `q`      | Close thread buffer                          |
 | `Ctrl-Q` | Close thread buffer (works in insert mode)   |
@@ -337,7 +337,7 @@ A user can have at most one pending review per PR, and it can be created, submit
 
 Lifecycle commands, each starting with `Resolve()`:
 
-- **`:GHReviewStart`**: if a pending review exists, adopts it; otherwise creates one via `addPullRequestReview`. Optional — `Ctrl-A` in a thread buffer or `:GHReviewSubmit` work without it.
+- **`:GHReviewStart`**: if a pending review exists, adopts it; otherwise creates one via `addPullRequestReview`. Optional — `Ctrl-G` in a thread buffer or `:GHReviewSubmit` work without it.
 - **`:GHReviewSubmit`**: prompts for action (Comment / Approve / Request changes) and optional body, then `SubmitReviewAs()` resolves: an existing pending review is submitted via `submitPullRequestReview`; otherwise a review is created and submitted in one step via `addPullRequestReview` with an `event` parameter.
 - **`:GHReviewDiscard`**: if no pending review exists, reports so; otherwise prompts for confirmation and deletes it with all its pending comments via `deletePullRequestReview`.
 

@@ -116,7 +116,7 @@ A quick-start sequence for either workflow: >
                                                               *:GHReviewStart*
 :GHReviewStart          Start a pending review.  Comments posted with the
                         pending action are held until the review is
-                        submitted.  This is optional: CTRL-A in a thread
+                        submitted.  This is optional: CTRL-G in a thread
                         buffer starts a review with that comment, and
                         |:GHReviewSubmit| works without one.  If a pending
                         review already exists on the PR (from a previous
@@ -233,7 +233,7 @@ comments, and a reply area: >
     alice (2025-01-15):
       Looks good
 
-    -- Ctrl-S: post comment now · Ctrl-A: start pending review · Ctrl-Q: cancel --
+    -- Ctrl-S: post comment now · Ctrl-G: start pending review · Ctrl-Q: cancel --
 
 <
 or, while a pending review exists: >
@@ -260,9 +260,9 @@ is pending at submit time, starting one if there is none.
 
 GitHub does not allow standalone review comments or replies while you have
 a pending review.  So once a review is pending, every comment goes into it
-and CTRL-A is not mapped.  If a review was started elsewhere after the
+and CTRL-G is not mapped.  If a review was started elsewhere after the
 buffer opened, "post comment now" fails with an explanation and the buffer
-stays open; CTRL-A ("start pending review") then adds the comment to the
+stays open; CTRL-G ("start pending review") then adds the comment to the
 existing review.  To post standalone again after the review was submitted
 or discarded elsewhere, copy the text, refresh with `R` in the files list
 and reopen the thread.
@@ -272,7 +272,7 @@ THREAD MAPPINGS ~
 
 CTRL-S                  Submit with the default action shown in the
                         separator line.
-CTRL-A                  Submit with the alternative action ("start pending
+CTRL-G                  Submit with the alternative action ("start pending
                         review").  Only mapped when no pending review
                         existed when the buffer was opened.
 CTRL-R                  Resolve or unresolve the thread.

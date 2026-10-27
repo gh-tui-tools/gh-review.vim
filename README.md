@@ -90,7 +90,7 @@ g?                      Show keymap help
 |--------------------|---------------------------------------------------------------|
 | `:GHReview`        | Open a PR (auto-detect, by number, or by URL)                 |
 | `:GHReviewFiles`   | Toggle the changed files list                                 |
-| `:GHReviewStart`   | Start a pending review (optional — `Ctrl-A` in a thread buffer or `:GHReviewSubmit` work without it) |
+| `:GHReviewStart`   | Start a pending review (optional — `Ctrl-G` in a thread buffer or `:GHReviewSubmit` work without it) |
 | `:GHReviewSubmit`  | Submit a review (Comment / Approve / Request changes)         |
 | `:GHReviewDiscard` | Discard the pending review and all its pending comments       |
 | `:GHReviewClose`   | Close all review buffers and reset state                      |
@@ -115,7 +115,7 @@ g?                      Show keymap help
 | Key      | Action                                        |
 |----------|-----------------------------------------------|
 | `Ctrl-S` | Submit with the default action shown in the separator |
-| `Ctrl-A` | Submit with the alternative action (only without a pending review) |
+| `Ctrl-G` | Submit with the alternative action (only without a pending review) |
 | `Ctrl-R` | Toggle resolved/unresolved                    |
 | `q`      | Close the thread buffer                       |
 | `Ctrl-Q` | Close the thread buffer (works in insert mode)|
@@ -129,7 +129,7 @@ what based on whether a pending review was last known to exist, and the
 separator line always shows the current meaning:
 
 ```
-── Ctrl-S: post comment now · Ctrl-A: start pending review · Ctrl-Q: cancel ──
+── Ctrl-S: post comment now · Ctrl-G: start pending review · Ctrl-Q: cancel ──
 ── Ctrl-S: add to pending review · Ctrl-Q: cancel ──
 ```
 
@@ -140,9 +140,9 @@ moment, or starts one if there is none.
 
 GitHub does not allow standalone review comments or replies while you have a
 pending review, so once a review is pending every comment goes into it and
-there is no `Ctrl-A`. If a review was started elsewhere after the buffer
+there is no `Ctrl-G`. If a review was started elsewhere after the buffer
 opened, "post comment now" fails with an explanation and the buffer stays
-open; `Ctrl-A` ("start pending review") then adds the comment to the existing
+open; `Ctrl-G` ("start pending review") then adds the comment to the existing
 review. To post standalone again after the review was submitted or discarded
 elsewhere, copy the text, refresh with `R` in the files list and reopen the
 thread.
