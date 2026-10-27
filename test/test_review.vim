@@ -242,10 +242,10 @@ g:RunTest(':w performs the same default action as Ctrl-S', () => {
   Teardown()
 })
 
-g:RunTest('No review: Ctrl-A starts a pending review with the comment', () => {
+g:RunTest('No review: Ctrl-G starts a pending review with the comment', () => {
   Setup(false, '')
   OpenNewComment()
-  Press("\<C-a>")
+  Press("\<C-g>")
 
   assert_equal(['lookup', 'add_thread'], Ops())
   assert_false(has_key(FindCall('add_thread').vars, 'pullRequestReviewId'),
@@ -255,11 +255,11 @@ g:RunTest('No review: Ctrl-A starts a pending review with the comment', () => {
   Teardown()
 })
 
-g:RunTest('Unseen server review: Ctrl-A attaches the comment to it', () => {
+g:RunTest('Unseen server review: Ctrl-G attaches the comment to it', () => {
   # The original bug: a pending review exists that the plugin never saw.
   Setup(false, 'srv_unseen')
   OpenNewComment()
-  Press("\<C-a>")
+  Press("\<C-g>")
 
   assert_equal(['lookup', 'add_thread'], Ops())
   assert_equal('srv_unseen', FindCall('add_thread').vars.pullRequestReviewId)
@@ -288,29 +288,29 @@ g:RunTest('Stale hint: Ctrl-S never sends a dead review ID', () => {
   Teardown()
 })
 
-g:RunTest('Review mode: Ctrl-A is not mapped and not advertised', () => {
+g:RunTest('Review mode: Ctrl-G is not mapped and not advertised', () => {
   # GitHub rejects standalone comments while a pending review exists, so
   # review mode offers no alternative action.
   Setup(true, 'srv_rev')
   OpenNewComment()
-  assert_equal('', maparg('<C-a>', 'n'))
-  assert_equal('', maparg('<C-a>', 'i'))
+  assert_equal('', maparg('<C-g>', 'n'))
+  assert_equal('', maparg('<C-g>', 'i'))
   assert_notequal('', maparg('<C-s>', 'n'))
   var text = join(getbufline(state.GetThreadBufnr(), 1, '$'), "\n")
   assert_match('── Ctrl-S: add to pending review · Ctrl-Q: cancel ──', text)
-  assert_notmatch('Ctrl-A', text)
+  assert_notmatch('Ctrl-G', text)
   Teardown()
 })
 
-g:RunTest('No-review mode maps Ctrl-A', () => {
+g:RunTest('No-review mode maps Ctrl-G', () => {
   Setup(false, '')
   OpenNewComment()
-  assert_notequal('', maparg('<C-a>', 'n'))
-  assert_notequal('', maparg('<C-a>', 'i'))
+  assert_notequal('', maparg('<C-g>', 'n'))
+  assert_notequal('', maparg('<C-g>', 'i'))
   Teardown()
 })
 
-g:RunTest('Review started meanwhile: Ctrl-S fails clearly, Ctrl-A adds to it', () => {
+g:RunTest('Review started meanwhile: Ctrl-S fails clearly, Ctrl-G adds to it', () => {
   Setup(false, '')
   OpenNewComment()
   var bufnr = state.GetThreadBufnr()
@@ -322,14 +322,14 @@ g:RunTest('Review started meanwhile: Ctrl-S fails clearly, Ctrl-A adds to it', (
   assert_equal(['POST /repos/testowner/testrepo/pulls/42/comments'], Ops())
   var msgs = execute('messages')
   assert_match('you have a pending review', msgs)
-  assert_match('Press Ctrl-A', msgs)
+  assert_match('Press Ctrl-G', msgs)
   assert_notmatch('HTTP 422', msgs, 'raw gh error replaced by an explanation')
   assert_true(bufexists(bufnr), 'buffer kept open so the text is not lost')
   assert_true(state.LastKnownReviewActive(), 'hint learns about the review')
 
-  # Ctrl-A ("start pending review") resolves and appends to the existing one.
+  # Ctrl-G ("start pending review") resolves and appends to the existing one.
   calls = []
-  Press("\<C-a>")
+  Press("\<C-g>")
   assert_equal(['lookup', 'add_thread'], Ops())
   assert_equal('srv_meanwhile', FindCall('add_thread').vars.pullRequestReviewId)
   assert_equal('a new comment', FindCall('add_thread').vars.body)
@@ -337,18 +337,18 @@ g:RunTest('Review started meanwhile: Ctrl-S fails clearly, Ctrl-A adds to it', (
   Teardown()
 })
 
-g:RunTest('Review started meanwhile: standalone reply fails clearly, Ctrl-A adds to it', () => {
+g:RunTest('Review started meanwhile: standalone reply fails clearly, Ctrl-G adds to it', () => {
   Setup(false, '')
   OpenReply()
   server_pending = 'srv_meanwhile'
 
   Press("\<C-s>")
   assert_equal(['POST /repos/testowner/testrepo/pulls/42/comments/1001/replies'], Ops())
-  assert_match('Press Ctrl-A', execute('messages'))
+  assert_match('Press Ctrl-G', execute('messages'))
   assert_notequal(-1, state.GetThreadBufnr())
 
   calls = []
-  Press("\<C-a>")
+  Press("\<C-g>")
   assert_equal(['lookup', 'add_reply', 'refresh'], Ops(), 'no new review started')
   assert_equal('srv_meanwhile', FindCall('add_reply').vars.pullRequestReviewId)
   Teardown()
@@ -381,10 +381,10 @@ g:RunTest('No review: Ctrl-S posts a reply standalone via REST', () => {
   Teardown()
 })
 
-g:RunTest('No review: Ctrl-A starts a review and adds the reply to it', () => {
+g:RunTest('No review: Ctrl-G starts a review and adds the reply to it', () => {
   Setup(false, '')
   OpenReply()
-  Press("\<C-a>")
+  Press("\<C-g>")
 
   assert_equal(['lookup', 'start', 'add_reply', 'refresh'], Ops())
   var reply = FindCall('add_reply')
@@ -394,10 +394,10 @@ g:RunTest('No review: Ctrl-A starts a review and adds the reply to it', () => {
   Teardown()
 })
 
-g:RunTest('Unseen server review: Ctrl-A adds the reply to it without starting one', () => {
+g:RunTest('Unseen server review: Ctrl-G adds the reply to it without starting one', () => {
   Setup(false, 'srv_unseen')
   OpenReply()
-  Press("\<C-a>")
+  Press("\<C-g>")
 
   assert_equal(['lookup', 'add_reply', 'refresh'], Ops())
   assert_equal('srv_unseen', FindCall('add_reply').vars.pullRequestReviewId)

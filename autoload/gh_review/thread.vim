@@ -11,11 +11,11 @@ import autoload 'gh_review.vim' as orchestrator
 
 # Action labels for the submit keys, derived from the pending-review state
 # frozen when the thread buffer was opened.  Returns
-# [default action (Ctrl-S / :w), alternative action (Ctrl-A)].
+# [default action (Ctrl-S / :w), alternative action (Ctrl-G)].
 #
 # There is no alternative in review mode: GitHub rejects standalone review
 # comments and replies while the user has a pending review ("user_id can
-# only have one pending review per pull request"), so Ctrl-A is not mapped.
+# only have one pending review per pull request"), so Ctrl-G is not mapped.
 def ModeLabels(pending_at_open: bool): list<string>
   if pending_at_open
     return ['add to pending review', '']
@@ -27,7 +27,7 @@ def BuildSeparator(pending_at_open: bool): string
   var [default_label, alt_label] = ModeLabels(pending_at_open)
   var parts = ['Ctrl-S: ' .. default_label]
   if !empty(alt_label)
-    add(parts, 'Ctrl-A: ' .. alt_label)
+    add(parts, 'Ctrl-G: ' .. alt_label)
   endif
   add(parts, 'Ctrl-Q: cancel')
   return '── ' .. join(parts, ' · ') .. ' ──'
@@ -74,7 +74,7 @@ def ShowThread(t: dict<any>)
   var is_new = empty(thread_id)
 
   # Freeze the submit mode for the whole lifetime of this buffer: the
-  # separator labels and the meaning of Ctrl-S / Ctrl-A never change while
+  # separator labels and the meaning of Ctrl-S / Ctrl-G never change while
   # composing.  This uses the last known (display-only) review state so
   # opening stays instant; the actual review is resolved at submit time,
   # so a review started/submitted/discarded meanwhile only changes the
@@ -193,8 +193,8 @@ def ShowThread(t: dict<any>)
   nnoremap <nowait> <buffer> <C-s> <ScriptCmd>SubmitReply()<CR>
   inoremap <nowait> <buffer> <C-s> <Esc><ScriptCmd>SubmitReply()<CR>
   if !pending_at_open
-    nnoremap <nowait> <buffer> <C-a> <ScriptCmd>SubmitAlt()<CR>
-    inoremap <nowait> <buffer> <C-a> <Esc><ScriptCmd>SubmitAlt()<CR>
+    nnoremap <nowait> <buffer> <C-g> <ScriptCmd>SubmitAlt()<CR>
+    inoremap <nowait> <buffer> <C-g> <Esc><ScriptCmd>SubmitAlt()<CR>
   endif
   nnoremap <nowait> <buffer> <C-r> <ScriptCmd>ToggleResolve()<CR>
   nnoremap <nowait> <buffer> q <ScriptCmd>CloseThreadBuffer()<CR>
@@ -282,7 +282,7 @@ def SubmitReply()
   DispatchSubmit(get(b:, 'gh_review_pending_at_open', false))
 enddef
 
-# Ctrl-A — the alternative action ("start pending review").  Only mapped
+# Ctrl-G — the alternative action ("start pending review").  Only mapped
 # when the buffer was opened without a pending review.
 def SubmitAlt()
   DispatchSubmit(!get(b:, 'gh_review_pending_at_open', false))
@@ -441,7 +441,7 @@ enddef
 #
 # The common failure is a pending review that appeared after this buffer
 # was opened (web UI, another session, :GHReviewStart): GitHub then rejects
-# standalone comments.  Point the user at Ctrl-A, which resolves the review
+# standalone comments.  Point the user at Ctrl-G, which resolves the review
 # at submit time and so adds the comment to the existing review.
 def ReportStandaloneError(stdout: string, stderr: string)
   var detail = trim(stderr)
@@ -460,7 +460,7 @@ def ReportStandaloneError(stdout: string, stderr: string)
   if detail =~# 'one pending review'
     state.SetLastKnownReviewActive(true)
     echomsg '[gh-review] Not posted: you have a pending review, and GitHub only allows'
-      .. ' adding comments to it. Press Ctrl-A ("start pending review") to add this'
+      .. ' adding comments to it. Press Ctrl-G ("start pending review") to add this'
       .. ' comment to your existing review instead.'
   else
     echomsg '[gh-review] Not posted: ' .. detail
@@ -540,7 +540,7 @@ def ShowThreadHelp()
     printf('  Ctrl-S    %s (also :w)', default_label),
   ]
   if !empty(alt_label)
-    add(help, printf('  Ctrl-A    %s', alt_label))
+    add(help, printf('  Ctrl-G    %s', alt_label))
   endif
   help += [
     '  Ctrl-R    Toggle resolved',

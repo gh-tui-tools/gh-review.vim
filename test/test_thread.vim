@@ -85,7 +85,7 @@ g:RunTest('Thread buffer: existing thread renders header and comments', () => {
   # default action is adding to that review and there is no alternative
   # (GitHub rejects standalone comments while a review is pending).
   assert_match('Ctrl-S: add to pending review', all_text)
-  assert_notmatch('Ctrl-A', all_text)
+  assert_notmatch('Ctrl-G', all_text)
 
   thread.CloseThreadBuffer()
   CleanupDiffBuffers()
@@ -139,7 +139,7 @@ g:RunTest('Thread buffer: new comment renders New header', () => {
   assert_false(getbufvar(bufnr, 'gh_review_pending_at_open'))
   var all_text = join(lines, "\n")
   assert_match('Ctrl-S: post comment now', all_text)
-  assert_match('Ctrl-A: start pending review', all_text)
+  assert_match('Ctrl-G: start pending review', all_text)
 
   thread.CloseThreadBuffer()
   CleanupDiffBuffers()
